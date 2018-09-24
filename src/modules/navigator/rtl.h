@@ -31,7 +31,7 @@
  *
  ****************************************************************************/
 /**
- * @file navigator_rtl.h
+ * @file rtl.h
  * Helper class for RTL
  *
  * @author Julian Oes <julian@oes.ch>

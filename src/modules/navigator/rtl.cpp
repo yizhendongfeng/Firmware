@@ -31,7 +31,7 @@
  *
  ****************************************************************************/
 /**
- * @file navigator_rtl.cpp
+ * @file rtl.cpp
  * Helper class to access RTL
  * @author Julian Oes <julian@oes.ch>
  * @author Anton Babushkin <anton.babushkin@me.com>
