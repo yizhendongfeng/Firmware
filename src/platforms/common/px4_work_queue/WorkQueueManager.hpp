@@ -31,81 +31,94 @@
  *
  ****************************************************************************/
 
-#include "px4_init.h"
+#pragma once
 
-#include <px4_config.h>
-#include <px4_defines.h>
-#include <drivers/drv_hrt.h>
-#include <lib/parameters/param.h>
-#include <px4_work_queue/WorkQueueManager.hpp>
-#include <systemlib/cpuload.h>
+#include <stdint.h>
 
-#include <fcntl.h>
-
-
-#include "platform/cxxinitialize.h"
-
-int px4_platform_init(void)
+namespace px4
 {
 
-#if defined(CONFIG_HAVE_CXX) && defined(CONFIG_HAVE_CXXINITIALIZE)
-	/* run C++ ctors before we go any further */
-	up_cxxinitialize();
+class WorkQueue; // forward declaration
 
-#	if defined(CONFIG_SYSTEM_NSH_CXXINITIALIZE)
-#  		error CONFIG_SYSTEM_NSH_CXXINITIALIZE Must not be defined! Use CONFIG_HAVE_CXX and CONFIG_HAVE_CXXINITIALIZE.
-#	endif
+struct wq_config {
+	const char *name;
+	uint16_t stacksize;
+	int8_t priority; // relative to max
+};
 
-#else
-#  error platform is dependent on c++ both CONFIG_HAVE_CXX and CONFIG_HAVE_CXXINITIALIZE must be defined.
-#endif
+// work queues
+enum PX4_WQS {
+
+	rate_ctrl = 0,	// PX4 inner loop
+
+	SPI1,
+	SPI2,
+	SPI3,
+	SPI4,
+	SPI5,
+	SPI6,
+
+	I2C1,
+	I2C2,
+	I2C3,
+	I2C4,
+
+	hp_default, // PX4 misc
+
+	test1,		// testing
+	test2,		// testing
+};
+
+// TODO: set priorities appropriately for linux, macos, qurt (unify with px4_tasks.h)
+static constexpr wq_config wq_configurations[] = {
+
+	[rate_ctrl] = { "wq:rate_ctrl", 1500, 0 },  // PX4 inner loop highest priority
+
+	[SPI1] = { "wq:SPI1", 1200, -1 },
+	[SPI2] = { "wq:SPI2", 1200, -2 },
+	[SPI3] = { "wq:SPI3", 1200, -3 },
+	[SPI4] = { "wq:SPI4", 1200, -4 },
+	[SPI5] = { "wq:SPI5", 1200, -5 },
+	[SPI6] = { "wq:SPI6", 1200, -6 },
+
+	[I2C1] = { "wq:I2C1", 1200, -7 },
+	[I2C2] = { "wq:I2C2", 1200, -8 },
+	[I2C3] = { "wq:I2C3", 1200, -9 },
+	[I2C4] = { "wq:I2C4", 1200, -10 },
+
+	[hp_default] = { "wq:hp_default", 1500, -11 },
+
+	[test1] = { "wq:test1", 800, 0 },
+	[test2] = { "wq:test2", 800, 0 },
+};
 
 
-#if !defined(CONFIG_DEV_CONSOLE) && defined(CONFIG_DEV_NULL)
 
-	/* Support running nsh on a board with out a console
-	 * Without this the assumption that the fd 0..2 are
-	 * std{in..err} will be wrong. NSH will read/write to the
-	 * fd it opens for the init script or nested scripts assigned
-	 * to fd 0..2.
-	 *
-	 */
+/**
+ * Start the work queue manager task.
+ */
+int work_queue_manager_start();
 
-	int fd = open("/dev/null", O_RDWR);
+/**
+ * Stop the work queue manager task.
+ */
+int work_queue_manager_stop();
 
-	if (fd == 0) {
-		/* Successfully opened /dev/null as stdin (fd == 0) */
+/**
+ * Create (or find) a work queue with a particular configuration.
+ *
+ * @param new_wq		The work queue configuration (see WorkQueueManager.hpp).
+ * @return		A pointer to the WorkQueue, or nullptr on failure.
+ */
+WorkQueue *work_queue_create(const wq_config &new_wq);
 
-		(void)fs_dupfd2(0, 1);
-		(void)fs_dupfd2(0, 2);
-		(void)fs_fdopen(0, O_RDONLY,         NULL);
-		(void)fs_fdopen(1, O_WROK | O_CREAT, NULL);
-		(void)fs_fdopen(2, O_WROK | O_CREAT, NULL);
+/**
+ * Map a PX4 driver device id to a work queue (by sensor bus).
+ *
+ * @param device_id		The PX4 driver's device id.
+ * @return		A work queue configuration.
+ */
+const wq_config &device_bus_to_wq(uint32_t device_id);
 
-	} else {
-		/* We failed to open /dev/null OR for some reason, we opened
-		 * it and got some file descriptor other than 0.
-		 */
 
-		if (fd > 0) {
-			(void)close(fd);
-		}
-
-		return -ENFILE;
-	}
-
-#endif
-
-	hrt_init();
-
-	param_init();
-
-	/* configure CPU load estimation */
-#ifdef CONFIG_SCHED_INSTRUMENTATION
-	cpuload_initialize_once();
-#endif
-
-	px4::work_queue_manager_start();
-
-	return PX4_OK;
-}
+} // namespace px4
