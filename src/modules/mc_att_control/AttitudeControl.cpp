@@ -42,7 +42,8 @@
 
 using namespace matrix;
 
-matrix::Vector3f AttitudeControl::update(matrix::Quatf q, matrix::Quatf qd, float yawspeed_feedforward) {
+matrix::Vector3f AttitudeControl::update(matrix::Quatf q, matrix::Quatf qd, float yawspeed_feedforward)
+{
 	// prepare yaw weight from the ratio between roll/pitch and yaw gains
 	const float roll_pitch_gain = (_proportional_gain(0) + _proportional_gain(1)) / 2.f;
 	const float yaw_w = math::constrain(_proportional_gain(2) / roll_pitch_gain, 0.f, 1.f);

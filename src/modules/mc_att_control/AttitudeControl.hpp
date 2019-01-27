@@ -60,13 +60,13 @@ public:
 	 * Set proportional attitude control gain
 	 * @param proportional_gain 3D vector containing gains for roll, pitch, yaw
 	 */
-	void setProportionalGain(matrix::Vector3f proportional_gain) { _proportional_gain = proportional_gain; }
+	void setProportionalGain(const matrix::Vector3f &proportional_gain) { _proportional_gain = proportional_gain; }
 
 	/**
 	 * Set hard limit for output rate setpoints
 	 * @param rate_limit [rad/s] 3D vector containing limits for roll, pitch, yaw
 	 */
-	void setRateLimit(matrix::Vector3f rate_limit) { _rate_limit = rate_limit; }
+	void setRateLimit(const matrix::Vector3f &rate_limit) { _rate_limit = rate_limit; }
 
 private:
 	matrix::Vector3f _proportional_gain;
