@@ -58,6 +58,8 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/landing_gear.h>
 
+#include "AttitudeControl.hpp"
+
 /**
  * Multicopter attitude control app start / stop handling function
  */
@@ -274,7 +276,8 @@ private:
 		(ParamInt<px4::params::MC_AIRMODE>) _airmode
 	)
 
-	matrix::Vector3f _attitude_p;		/**< P gain for attitude control */
+	AttitudeControl _attitude_control; /**< class for core attitude control calculations */
+
 	matrix::Vector3f _rate_p;		/**< P gain for angular rate error */
 	matrix::Vector3f _rate_i;		/**< I gain for angular rate error */
 	matrix::Vector3f _rate_int_lim;		/**< integrator state limit for rate loop */

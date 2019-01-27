@@ -52,8 +52,6 @@
 #include <mathlib/math/Limits.hpp>
 #include <mathlib/math/Functions.hpp>
 
-#include "AttitudeControl.hpp"
-
 #define TPA_RATE_LOWER_LIMIT 0.05f
 
 #define AXIS_INDEX_ROLL 0
@@ -135,8 +133,9 @@ MulticopterAttitudeControl::parameters_updated()
 {
 	/* Store some of the parameters in a more convenient way & precompute often-used values */
 
+	_attitude_control.setProportionalGain(Vector3f(_roll_p.get(), _pitch_p.get(), _yaw_p.get()));
+
 	/* roll gains */
-	_attitude_p(0) = _roll_p.get();
 	_rate_p(0) = _roll_rate_p.get();
 	_rate_i(0) = _roll_rate_i.get();
 	_rate_int_lim(0) = _roll_rate_integ_lim.get();
@@ -144,7 +143,6 @@ MulticopterAttitudeControl::parameters_updated()
 	_rate_ff(0) = _roll_rate_ff.get();
 
 	/* pitch gains */
-	_attitude_p(1) = _pitch_p.get();
 	_rate_p(1) = _pitch_rate_p.get();
 	_rate_i(1) = _pitch_rate_i.get();
 	_rate_int_lim(1) = _pitch_rate_integ_lim.get();
@@ -152,7 +150,6 @@ MulticopterAttitudeControl::parameters_updated()
 	_rate_ff(1) = _pitch_rate_ff.get();
 
 	/* yaw gains */
-	_attitude_p(2) = _yaw_p.get();
 	_rate_p(2) = _yaw_rate_p.get();
 	_rate_i(2) = _yaw_rate_i.get();
 	_rate_int_lim(2) = _yaw_rate_integ_lim.get();
@@ -542,18 +539,15 @@ MulticopterAttitudeControl::control_attitude()
 	// physical thrust axis is the negative of body z axis
 	_thrust_sp = -_v_att_sp.thrust_body[2];
 
-	AttitudeControl attitude_control;
-	attitude_control.setProportionalGain(_attitude_p);
-
 	if ((_v_control_mode.flag_control_velocity_enabled || _v_control_mode.flag_control_auto_enabled) &&
 		!_v_control_mode.flag_control_manual_enabled) {
-		attitude_control.setRateLimit(_auto_rate_max);
+		_attitude_control.setRateLimit(_auto_rate_max);
 
 	} else {
-		attitude_control.setRateLimit(_mc_rate_max);
+		_attitude_control.setRateLimit(_mc_rate_max);
 	}
 
-	_rates_sp = attitude_control.update(Quatf(_v_att.q), Quatf(_v_att_sp.q_d), _v_att_sp.yaw_sp_move_rate);
+	_rates_sp = _attitude_control.update(Quatf(_v_att.q), Quatf(_v_att_sp.q_d), _v_att_sp.yaw_sp_move_rate);
 }
 
 /*
