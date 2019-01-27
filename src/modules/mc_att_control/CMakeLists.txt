@@ -39,6 +39,7 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		mc_att_control_main.cpp
+		AttitudeControl.cpp
 	DEPENDS
 		circuit_breaker
 		conversion
