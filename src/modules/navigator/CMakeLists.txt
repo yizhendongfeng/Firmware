@@ -34,7 +34,7 @@
 px4_add_module(
 	MODULE modules__navigator
 	MAIN navigator
-	STACK_MAIN 1300
+	STACK_MAIN 1500
 	COMPILE_FLAGS
 	SRCS
 		navigator_main.cpp
