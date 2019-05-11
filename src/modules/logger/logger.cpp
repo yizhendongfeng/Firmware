@@ -51,6 +51,8 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_gps_position.h>
 #include <uORB/topics/vehicle_command_ack.h>
+#include <uORB/topics/formation_position.h>
+#include <uORB/topics/follow_target.h>
 
 #include <drivers/drv_hrt.h>
 #include <px4_includes.h>
@@ -647,7 +649,8 @@ void Logger::add_default_topics()
 	add_topic("vtol_vehicle_status", 200);
 	add_topic("wind_estimate", 200);
 	add_topic("timesync_status");
-
+    add_topic("formation_position");//zjm
+    add_topic("follow_target");
 #ifdef CONFIG_ARCH_BOARD_SITL
 	add_topic("actuator_armed");
 	add_topic("actuator_controls_virtual_fw");
