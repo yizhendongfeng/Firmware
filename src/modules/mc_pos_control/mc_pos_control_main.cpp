@@ -1408,45 +1408,46 @@ MulticopterPositionControl::control_non_manual()
 		/* AUTO */
 		control_auto();
 	}
+#if 0
+    //目标速度被后面calculate_velocity_setpoint();函数中的位置pid替换了，将此段代码移至calculate_velocity_setpoint()期望速度计算后
+    // guard against any bad velocity values
+    bool velocity_valid = PX4_ISFINITE(_pos_sp_triplet.current.vx) &&
+                  PX4_ISFINITE(_pos_sp_triplet.current.vy) &&
+                  _pos_sp_triplet.current.velocity_valid;
 
-	// guard against any bad velocity values
-	bool velocity_valid = PX4_ISFINITE(_pos_sp_triplet.current.vx) &&
-			      PX4_ISFINITE(_pos_sp_triplet.current.vy) &&
-			      _pos_sp_triplet.current.velocity_valid;
+    // do not go slower than the follow target velocity when position tracking is active (set to valid)
+    if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
+        velocity_valid &&
+        _pos_sp_triplet.current.position_valid) {
 
-	// do not go slower than the follow target velocity when position tracking is active (set to valid)
-	if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
-	    velocity_valid &&
-	    _pos_sp_triplet.current.position_valid) {
+        matrix::Vector3f ft_vel(_pos_sp_triplet.current.vx, _pos_sp_triplet.current.vy, 0.0f);
 
-		matrix::Vector3f ft_vel(_pos_sp_triplet.current.vx, _pos_sp_triplet.current.vy, 0.0f);
+        float cos_ratio = (ft_vel * _vel_sp) / (ft_vel.length() * _vel_sp.length());
 
-		float cos_ratio = (ft_vel * _vel_sp) / (ft_vel.length() * _vel_sp.length());
+        // only override velocity set points when uav is traveling in same direction as target and vector component
+        // is greater than calculated position set point velocity component
 
-		// only override velocity set points when uav is traveling in same direction as target and vector component
-		// is greater than calculated position set point velocity component
+        if (cos_ratio > 0) {
+            ft_vel *= (cos_ratio);
+            // min speed a little faster than target vel
+            ft_vel += ft_vel.normalized() * 1.5f;
 
-		if (cos_ratio > 0) {
-			ft_vel *= (cos_ratio);
-			// min speed a little faster than target vel
-			ft_vel += ft_vel.normalized() * 1.5f;
+        } else {
+            ft_vel.zero();
+        }
 
-		} else {
-			ft_vel.zero();
-		}
+        _vel_sp(0) = fabsf(ft_vel(0)) > fabsf(_vel_sp(0)) ? ft_vel(0) : _vel_sp(0);
+        _vel_sp(1) = fabsf(ft_vel(1)) > fabsf(_vel_sp(1)) ? ft_vel(1) : _vel_sp(1);
 
-		_vel_sp(0) = fabsf(ft_vel(0)) > fabsf(_vel_sp(0)) ? ft_vel(0) : _vel_sp(0);
-		_vel_sp(1) = fabsf(ft_vel(1)) > fabsf(_vel_sp(1)) ? ft_vel(1) : _vel_sp(1);
+        // track target using velocity only
 
-		// track target using velocity only
+    } else if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
+           velocity_valid) {
 
-	} else if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
-		   velocity_valid) {
-
-		_vel_sp(0) = _pos_sp_triplet.current.vx;
-		_vel_sp(1) = _pos_sp_triplet.current.vy;
-	}
-
+        _vel_sp(0) = _pos_sp_triplet.current.vx;
+        _vel_sp(1) = _pos_sp_triplet.current.vy;
+    }
+#endif
 	/* use constant descend rate when landing, ignore altitude setpoint */
 	if (_pos_sp_triplet.current.valid
 	    && _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_LAND) {
@@ -1738,7 +1739,7 @@ void MulticopterPositionControl::control_auto()
 			diff = fabsf(_curr_pos_sp(2) - curr_pos_sp(2));
 		}
 
-		if (diff > FLT_EPSILON || !PX4_ISFINITE(diff)) {
+        if (diff > FLT_EPSILON || !PX4_ISFINITE(diff)) {//fixme:PX4_ISFINITE(diff)应该判断为有限数才算更新
 			triplet_updated = true;
 		}
 
@@ -2373,7 +2374,46 @@ MulticopterPositionControl::calculate_velocity_setpoint()
 
 		}
 	}
+#if 1
+    //增加目标跟踪的速度期望
+    // guard against any bad velocity values
+    bool velocity_valid = PX4_ISFINITE(_pos_sp_triplet.current.vx) &&
+                  PX4_ISFINITE(_pos_sp_triplet.current.vy) &&
+                  _pos_sp_triplet.current.velocity_valid;
 
+    // do not go slower than the follow target velocity when position tracking is active (set to valid)
+    if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
+        velocity_valid && !_control_mode.flag_control_manual_enabled&&//非手动
+        _pos_sp_triplet.current.position_valid) {
+
+        matrix::Vector3f ft_vel(_pos_sp_triplet.current.vx, _pos_sp_triplet.current.vy, 0.0f);
+
+        float cos_ratio = (ft_vel * _vel_sp) / (ft_vel.length() * _vel_sp.length());
+
+        // only override velocity set points when uav is traveling in same direction as target and vector component
+        // is greater than calculated position set point velocity component
+
+        if (cos_ratio > 0) {
+            ft_vel *= (cos_ratio);
+            // min speed a little faster than target vel
+            ft_vel += ft_vel.normalized() * 1.5f;
+
+        } else {
+            ft_vel.zero();
+        }
+
+        _vel_sp(0) = fabsf(ft_vel(0)) > fabsf(_vel_sp(0)) ? ft_vel(0) : _vel_sp(0);
+        _vel_sp(1) = fabsf(ft_vel(1)) > fabsf(_vel_sp(1)) ? ft_vel(1) : _vel_sp(1);
+
+        // track target using velocity only
+
+    } else if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
+           velocity_valid && !_control_mode.flag_control_manual_enabled) {    //非手动
+
+        _vel_sp(0) = _pos_sp_triplet.current.vx;
+        _vel_sp(1) = _pos_sp_triplet.current.vy;
+    }
+#endif
 	/* in auto the setpoint is already limited by the navigator */
 	if (!_control_mode.flag_control_auto_enabled) {
 		limit_altitude();
