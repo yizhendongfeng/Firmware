@@ -23,7 +23,7 @@ set(config_module_list
 	drivers/gps
 	#drivers/hott
 	#drivers/iridiumsbd
-	#drivers/irlock
+	drivers/irlock		#zjm
 	drivers/imu/l3gd20
 	drivers/imu/lsm303d
 	drivers/magnetometer/hmc5883
@@ -48,7 +48,7 @@ set(config_module_list
 
 	# distance sensors
 	drivers/distance_sensor/ll40ls
-	#drivers/distance_sensor/mb12xx
+	drivers/distance_sensor/mb12xx		#sonar zjm
 	drivers/distance_sensor/sf0x
 	drivers/distance_sensor/sf1xx
 	drivers/distance_sensor/srf02
@@ -70,7 +70,7 @@ set(config_module_list
 	#systemcmds/motor_ramp
 	#systemcmds/motor_test
 	systemcmds/mtd
-	#systemcmds/nshterm
+	systemcmds/nshterm
 	systemcmds/param
 	systemcmds/perf
 	systemcmds/pwm
@@ -108,20 +108,25 @@ set(config_module_list
 	#modules/uavcan
 
 	#
+	# Formation control ***zjm
+	#
+	#modules/formation
+
+	#
 	# Estimation modules
 	#
 	#modules/attitude_estimator_q
 	modules/ekf2
 	#modules/local_position_estimator
 	#modules/position_estimator_inav
-	#modules/landing_target_estimator
+	modules/landing_target_estimator	#zjm
 	#modules/wind_estimator
 
 	#
 	# Vehicle Control
 	#
-	modules/fw_att_control
-	modules/fw_pos_control_l1
+	#modules/fw_att_control
+	#modules/fw_pos_control_l1
 	#modules/gnd_att_control
 	#modules/gnd_pos_control
 	modules/mc_att_control
