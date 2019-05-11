@@ -48,7 +48,13 @@
 
 #include <px4_module_params.h>
 #include <uORB/topics/follow_target.h>
-
+#include <uORB/topics/formation_position.h>
+#include <v2.0/mavlink_types.h>
+#define FORMATION
+//#define FORMATIONTEST   //调试navigator start会切换到跟踪模式,注释后通过地面站切换到跟踪模式
+#define YAWTEST
+#define VIRTUALTEST
+extern const mavlink_system_t mavlink_system;
 class FollowTarget : public MissionBlock, public ModuleParams
 {
 
@@ -67,7 +73,7 @@ private:
 	static constexpr int INTERPOLATION_PNTS = 20;
 	static constexpr float FF_K = .25F;
 	static constexpr float OFFSET_M = 8;
-
+    const uint8_t LEADER_ID = 1;
 	enum FollowTargetState {
 		TRACK_POSITION,
 		TRACK_VELOCITY,
@@ -100,6 +106,9 @@ private:
 	int _follow_target_position{FOLLOW_FROM_BEHIND};
 
 	int _follow_target_sub{-1};
+    uint64_t _last_time{0}; //输出到地面站消息定时器
+    uint64_t _prev_time{0}; //计算循环间隔
+    bool _time_updated{false};
 	float _step_time_in_ms{0.0f};
 	float _follow_offset{OFFSET_M};
 
@@ -116,7 +125,17 @@ private:
 
 	follow_target_s _current_target_motion{};
 	follow_target_s _previous_target_motion{};
-
+#ifdef FORMATION
+    formation_position_s _formation_positions[4];   //一条船，三架飞机，使用下标来获取船和其他飞机位置
+    int	_formation_pos_sub[4] = {-1, -1, -1, -1};
+    int _interpolation_points = 0;
+    #ifdef VIRTUALTEST
+        orb_advert_t	_follow_target_pub{nullptr};
+        matrix::Vector3f _virtual_target_movement = matrix::Vector3f(0.0f, 0.0f, 0.0f);  //
+        follow_target_s _virtual_target{};  //以返航点为基础以固定速度产生虚拟期望点
+        bool _prev_time_updated{false};
+    #endif
+#endif
 	float _yaw_rate{0.0f};
 	float _responsiveness{0.0f};
 	float _yaw_angle{0.0f};
