@@ -2025,7 +2025,7 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("DISTANCE_SENSOR", 0.5f);
 		configure_stream("ESTIMATOR_STATUS", 0.5f);
 		configure_stream("EXTENDED_SYS_STATE", 1.0f);
-		configure_stream("GLOBAL_POSITION_INT", 5.0f);
+        configure_stream("GLOBAL_POSITION_INT", 10.0f);//zjm
 		configure_stream("GPS_RAW_INT", 1.0f);
 		configure_stream("HIGHRES_IMU", 1.5f);
 		configure_stream("HOME_POSITION", 0.5f);
