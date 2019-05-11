@@ -737,12 +737,14 @@ Navigator::run()
 		}
 
 		_navigation_mode = navigation_mode_new;
-
+#ifndef FORMATIONTEST
 		/* iterate through navigation modes and set active/inactive for each */
 		for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
 			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
 		}
-
+#else
+        _navigation_mode_array[10]->run(true);  //开始跟踪目标    zjm
+#endif
 		/* if we landed and have not received takeoff setpoint then stay in idle */
 		if (_land_detected.landed &&
 		    !((_vstatus.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF)
