@@ -24,10 +24,14 @@ set(config_module_list
 	#drivers/hott
 	#drivers/iridiumsbd
 	drivers/irlock		#zjm
+
 	drivers/imu/l3gd20
 	drivers/imu/lsm303d
+	#drivers/imu/icm20948	#used for here+ gps zjm
 	drivers/magnetometer/hmc5883
 	drivers/magnetometer/lis3mdl
+	drivers/magnetometer/ak09916 #zjm
+	drivers/magnetometer/ist8310 #zjm
 	#drivers/mb12xx
 	#drivers/mkblctrl
 	drivers/imu/mpu6000
@@ -112,6 +116,8 @@ set(config_module_list
 	#
 	#modules/formation
 
+	# harpoon sysytem control   ***zjm
+	modules/harpoon
 	#
 	# Estimation modules
 	#
