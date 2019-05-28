@@ -142,16 +142,16 @@ static bool magnometerCheck(orb_advert_t *mavlink_log_pub, vehicle_status_s &sta
 		goto out;
 	}
 
-	ret = h.ioctl(MAGIOCSELFTEST, 0);
+//	ret = h.ioctl(MAGIOCSELFTEST, 0);
 
-	if (ret != OK) {
-		if (report_fail) {
-			mavlink_log_critical(mavlink_log_pub, "PREFLIGHT FAIL: MAG #%u SELFTEST FAILED", instance);
-		}
+//	if (ret != OK) {
+//		if (report_fail) {
+//			mavlink_log_critical(mavlink_log_pub, "PREFLIGHT FAIL: MAG #%u SELFTEST FAILED", instance);
+//		}
 
-		success = false;
-		goto out;
-	}
+//		success = false;
+//		goto out;
+//	}
 
 out:
 	if (instance==0) set_health_flags(subsystem_info_s::SUBSYSTEM_TYPE_MAG, present, !optional, success, status);
@@ -727,7 +727,7 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, vehicle_status_s &status,
 #endif
 
 	bool failed = false;
-
+#if 0
 	/* ---- MAG ---- */
 	if (checkSensors) {
 		bool prime_found = false;
@@ -767,7 +767,57 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, vehicle_status_s &status,
 			failed = true;
 		}
 	}
+#endif
+    /* ---- MAG ---- */
+        if (checkSensors) {
+            bool prime_found = false;
 
+            int32_t prime_id = -1;
+            param_get(param_find("CAL_MAG_PRIME"), &prime_id);
+
+            int32_t sys_has_mag = 1;
+            param_get(param_find("SYS_HAS_MAG"), &sys_has_mag);
+
+            bool mag_fail_reported = false;
+
+            /* check all sensors individually, but fail only for mandatory ones */
+            for (unsigned i = 0; i < max_optional_mag_count; i++) {
+                const bool required = (i < max_mandatory_mag_count) && (sys_has_mag == 1);
+                const bool report_fail = (reportFailures && !failed && !mag_fail_reported);
+
+                int32_t device_id = -1;
+
+                if (magnometerCheck(mavlink_log_pub, status, i, !required, device_id, report_fail)) {
+
+                    if ((prime_id > 0) && (device_id == prime_id)) {
+                        prime_found = true;
+                    }
+
+                } else {
+                    if (required) {
+                        failed = true;
+                        mag_fail_reported = true;
+                    }
+                }
+            }
+
+            if (sys_has_mag == 1) {
+                /* check if the primary device is present */
+                if (!prime_found) {
+                    if (reportFailures && !failed) {
+                        mavlink_log_critical(mavlink_log_pub, "Primary compass not found");
+                    }
+
+                    set_health_flags(subsystem_info_s::SUBSYSTEM_TYPE_MAG, false, true, false, status);
+                    failed = true;
+                }
+
+                /* mag consistency checks (need to be performed after the individual checks) */
+                if (!magConsistencyCheck(mavlink_log_pub, status, (reportFailures && !failed))) {
+                    failed = true;
+                }
+            }
+        }
 	/* ---- ACCEL ---- */
 	if (checkSensors) {
 		bool prime_found = false;
