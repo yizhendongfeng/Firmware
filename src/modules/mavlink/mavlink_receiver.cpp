@@ -2463,7 +2463,7 @@ void MavlinkReceiver::handle_message_gps_global_init(mavlink_message_t *msg)
     mavlink_msg_global_position_int_decode(msg, &global_position_msg);
     formation_position_s gcs_formation_position;
     memset(&gcs_formation_position, 0, sizeof(gcs_formation_position));
-    gcs_formation_position.timestamp = hrt_absolute_time();
+    gcs_formation_position.timestamp = hrt_absolute_time();     //global_position_msg.time_boot_ms;
     gcs_formation_position.lon = global_position_msg.lon / 1e7;
     gcs_formation_position.lat = global_position_msg.lat / 1e7;
     gcs_formation_position.alt = global_position_msg.alt / 1e3;
