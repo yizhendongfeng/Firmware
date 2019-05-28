@@ -924,6 +924,11 @@ fi
 	navigator start
 
 	#
+	# Start the harpoon
+	#
+	harpoon start
+
+	#
 	# Generic setup (autostart ID not found)
 	#
 	if [ $VEHICLE_TYPE == none ]
