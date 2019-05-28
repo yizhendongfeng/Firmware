@@ -288,13 +288,14 @@ void FollowTarget::on_active()
             _formation_positions[formation_pos.sysid].sysid = formation_pos.sysid;
             pos_updated[formation_pos.sysid] = true;
 
-            PX4_INFO("i:%d,receive sysid:%d pos, current_time:%llu, leader_updated:%d", i, formation_pos.sysid, current_time, pos_updated[formation_pos.sysid]);
+            PX4_INFO("i:%d,receive sysid:%d pos, current_time:%llu, leader_updated:%d",
+                     i, formation_pos.sysid, current_time, pos_updated[formation_pos.sysid]);
         }
     }
 
 #ifdef VIRTUALTEST
     ///使用home点作为起始点，产生向北以vel_sp速度前进的期望点
-    matrix::Vector3f vel_sp(2.0f, 0.0f, 0.0f);
+    matrix::Vector3f vel_sp(1.0f, 0.0f, 0.0f);
     if(_prev_time > 0.0f && _navigator->get_home_position()->valid_hpos && (hrt_elapsed_time(&_prev_time) > 2e5))   //已经赋值，经过一次循环
     {
         _virtual_target_movement += vel_sp * (current_time - _prev_time) * 1e-6;
@@ -314,8 +315,9 @@ void FollowTarget::on_active()
             _follow_target_pub = orb_advertise(ORB_ID(follow_target), &_virtual_target);
         }
         pos_updated[LEADER_ID] = true;
-        PX4_INFO("delta:%d,vx:%.2f,x:%.2f,step_vel:%.1f,current_vel(0):%.1f", (int)((current_time - _prev_time)*1e-3),
-                 (double)vel_sp(0), (double)_virtual_target_movement(0), (double)_step_vel(0), (double)_current_vel(0));
+        PX4_INFO("deltaMs:%d,vx_sp:%.2f,x:%.2f,step_vel:%.1f,current_vel(0):%.1f,lat:%.7f",
+                 (int)((current_time - _prev_time)*1e-3), (double)vel_sp(0),
+                 (double)_virtual_target_movement(0), (double)_step_vel(0), (double)_current_vel(0),_virtual_target.lat);
         _prev_time = current_time;
     }
 
@@ -323,7 +325,6 @@ void FollowTarget::on_active()
 
     if(pos_updated[LEADER_ID])
     {
-
         _target_updates++;
         // get distance to target
         _previous_target_motion = _current_target_motion;
@@ -337,202 +338,326 @@ void FollowTarget::on_active()
 #ifdef VIRTUALTEST
         _current_target_motion = _virtual_target;
 #endif
-        // update the average velocity of the target based on the position
-        _est_target_vel(0) = _current_target_motion.vx;//_target_position_delta / (dt_ms / 1000.0f);
-        _est_target_vel(1) = _current_target_motion.vy;
-        dt_ms = ((_current_target_motion.timestamp - _previous_target_motion.timestamp) / 1000);
+
+    }else if (((current_time - _current_target_motion.timestamp) / 1000) > TARGET_TIMEOUT_MS && target_velocity_valid()) {
+//        reset_target_validity();
+    }
+    // update distance to target
+
+    if (target_position_valid()) {
+
+        // get distance to target
         map_projection_init(&target_ref, _navigator->get_global_position()->lat, _navigator->get_global_position()->lon);
         map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon, &_target_distance(0),
                                &_target_distance(1));
-        PX4_INFO("leader updated, current_time:%llu,dt_ms:%.1f, _interpolation_points:%d_follow_offset:%.1f, ",
-                 current_time, (double)dt_ms,_interpolation_points,(double)_follow_offset);
+    }
 
-        // if the target is moving add an offset and rotation
-//        if (_est_target_vel.length() > .5F) {
-//            _target_position_offset = _rot_matrix * _est_target_vel.normalized() * _follow_offset;
-//        }
-//        else
+    if (target_velocity_valid() && pos_updated[LEADER_ID])//因为第一次更新前一点时间戳为0，导致dt_ms很大，_step_vel无穷大
+    {
+        dt_ms = ((_current_target_motion.timestamp - _previous_target_motion.timestamp) / 1000);
+        PX4_INFO("target_velocity_valid():%d,pos_updated[LEADER_ID]:%d,dt_ms:%.1f, _current_target_motion.timestamp:%llu",
+                 target_velocity_valid(), pos_updated[LEADER_ID],(double)dt_ms, _current_target_motion.timestamp);
+        if(dt_ms > 10.0f)
         {
-            //目标移动速度小,则认为目标没有移动,队形以目标的航向为基准
-            float yaw = _formation_positions[LEADER_ID].yaw;//target yaw
-            matrix::Vector3f targ_yaw_vector(cos(yaw),sin(yaw), 0);//
-            float rotate_angle = (float)pow(-1.0f, (double)(mavlink_system.sysid - 1)) * (float)(5 * M_PI / 6);//三角队形，偶数编号在左侧，奇数在右侧
-            matrix::Euler<float> euler( 0,0,rotate_angle);
-            matrix::Dcmf rot_matrix(euler);
-//            _follow_offset = mavlink_system.sysid / 2 * 2;//飞机编号除2得到与领飞飞机距离的整数倍
-            //三角形编队_follow_offset * (mavlink_system.sysid / 2)：使用飞机编号计算跟踪距离
-            _target_position_offset = rot_matrix * targ_yaw_vector * _follow_offset * (mavlink_system.sysid / 2);
+            _est_target_vel(0) = _current_target_motion.vx;
+            _est_target_vel(1) = _current_target_motion.vy;
+
+            // if the target is moving add an offset and rotation
+            //        if (_est_target_vel.length() > .5F) {
+            //            _target_position_offset = _rot_matrix * _est_target_vel.normalized() * _follow_offset;
+            //        }
+            //        else
+            {
+                //目标移动速度小,则认为目标没有移动,队形以目标的航向为基准
+                float yaw = _formation_positions[LEADER_ID].yaw;//target yaw
+                matrix::Vector3f targ_yaw_vector(cos(yaw),sin(yaw), 0);//
+                float rotate_angle = (float)pow(-1.0f, (double)(mavlink_system.sysid - 1)) * (float)(5 * M_PI / 6);//三角队形，偶数编号在左侧，奇数在右侧
+                matrix::Euler<float> euler( 0,0,rotate_angle);
+                matrix::Dcmf rot_matrix(euler);
+
+                //三角形编队_follow_offset * (mavlink_system.sysid / 2)：使用飞机编号计算跟踪距离
+                _target_position_offset = rot_matrix * targ_yaw_vector * _follow_offset * (mavlink_system.sysid / 2);
+            }
+
+            // are we within the target acceptance radius?
+            // give a buffer to exit/enter the radius to give the velocity controller
+            // a chance to catch up
+
+            _radius_exited = ((_target_position_offset + _target_distance).length() > (float) TARGET_ACCEPTANCE_RADIUS_M * 1.5f);
+            _radius_entered = ((_target_position_offset + _target_distance).length() < (float) TARGET_ACCEPTANCE_RADIUS_M);
+
+            // to keep the velocity increase/decrease smooth
+            // calculate how many velocity increments/decrements
+            // it will take to reach the targets velocity
+            // with the given amount of steps also add a feed forward input that adjusts the
+            // velocity as the position gap increases since
+            // just traveling at the exact velocity of the target will not
+            // get any closer or farther from the target
+
+            _step_vel = (_est_target_vel - _current_vel) + (_target_position_offset + _target_distance) * FF_K;
+            _interpolation_points = dt_ms / 50;//跟踪线程执行周期50ms,得到两次更新时间间隔需要插值个数
+            _interpolation_points = _interpolation_points < 1 ? 1 : _interpolation_points;
+            _step_vel /= (/*dt_ms / 1000.0F **/ (float)INTERPOLATION_PNTS);// _interpolation_points);
+            _step_time_in_ms = (dt_ms / (float)INTERPOLATION_PNTS);
+            PX4_INFO("_step_vel(0):%.1f,_interpolation_points:%d,dt_ms:%.3f",
+                     (double)_step_vel(0), _interpolation_points, (double)dt_ms);
+
+//            // if we are less than 1 meter from the target don't worry about trying to yaw
+//            // lock the yaw until we are at a distance that makes sense
+
+//            if ((_target_distance + _target_position_offset).length() > 1.0F) {
+
+//                // yaw rate smoothing
+
+//                // this really needs to control the yaw rate directly in the attitude pid controller
+//                // but seems to work ok for now since the yaw rate cannot be controlled directly in auto mode
+
+//                _yaw_angle = get_bearing_to_next_waypoint(_navigator->get_global_position()->lat,
+//                                                          _navigator->get_global_position()->lon,
+//                                                          target_motion_with_offset.lat,
+//                                                          target_motion_with_offset.lon);
+//                //测试:使用领航机的航向角作为偏置方向的标准,测试通过后清屏蔽此行代码
+//                _yaw_angle = _formation_positions[LEADER_ID].yaw;
+//                _yaw_rate = wrap_pi((_yaw_angle - _navigator->get_global_position()->yaw) / (dt_ms / 1000.0f));
+
+//            } else {
+//                _yaw_angle = _yaw_rate = NAN;
+//            }
+
         }
 
-        // are we within the target acceptance radius?
-        // give a buffer to exit/enter the radius to give the velocity controller
-        // a chance to catch up
 
-        _radius_exited = ((_target_position_offset + _target_distance).length() > (float) TARGET_ACCEPTANCE_RADIUS_M * 1.5f);
-        _radius_entered = ((_target_position_offset + _target_distance).length() < (float) TARGET_ACCEPTANCE_RADIUS_M);
+//        // clamp yaw rate smoothing if we are with in
+//        // 3 degrees of facing target
 
-        // to keep the velocity increase/decrease smooth
-        // calculate how many velocity increments/decrements
-        // it will take to reach the targets velocity
-        // with the given amount of steps also add a feed forward input that adjusts the
-        // velocity as the position gap increases since
-        // just traveling at the exact velocity of the target will not
-        // get any closer or farther from the target
-
-        _step_vel = (_est_target_vel - _current_vel) + (_target_position_offset + _target_distance) * FF_K;
-        _interpolation_points = dt_ms / 50;//跟踪线程执行周期50ms,得到两次更新时间间隔需要插值个数
-        _step_vel /= (/*dt_ms / 1000.0F **/ (float) _interpolation_points);
-        _step_time_in_ms = (dt_ms / (float) _interpolation_points);
-    }else if (((current_time - _current_target_motion.timestamp) / 1000) > TARGET_TIMEOUT_MS && target_velocity_valid()) {
-        reset_target_validity();
+//        if (PX4_ISFINITE(_yaw_rate)) {
+//            if (fabsf(fabsf(_yaw_angle) - fabsf(_navigator->get_global_position()->yaw)) < math::radians(3.0F)) {
+//                _yaw_rate = NAN;
+//            }
+//        }
     }
+
     if (target_position_valid()) {
         // get the target position using the calculated offset
         map_projection_init(&target_ref,  _current_target_motion.lat, _current_target_motion.lon);
         map_projection_reproject(&target_ref, _target_position_offset(0), _target_position_offset(1),
                                  &target_motion_with_offset.lat, &target_motion_with_offset.lon);
         target_motion_with_offset.alt = _current_target_motion.alt;
-    }
 
-    if(hrt_elapsed_time(&_last_time) > 1e6) //1s
-    {
-        mavlink_log_info(_navigator->get_mavlink_log_pub(), "vel:%.1f,%.2f,%d,dist:%.1f,vel:%.1f,"
-                                                            "dalt:%.1f,sta:%d",
-                         (double)_current_vel(0), (double)_step_vel(0),_interpolation_points,
-                         (double)(_target_position_offset + _target_distance).length(),
-                         (double)_est_target_vel.length(),
-                         (double)(_current_target_motion.alt - _navigator->get_global_position()->alt),
-                         _follow_target_state);
-        _time_updated = true;
-    }
+        // if we are less than 1 meter from the target don't worry about trying to yaw
+        // lock the yaw until we are at a distance that makes sense
 
-    // if we are less than 1 meter from the target don't worry about trying to yaw
-    // lock the yaw until we are at a distance that makes sense
+        if ((_target_distance + _target_position_offset).length() > 1.0F) {
 
-    if ((_target_distance).length() > 1.0F) {
+            // yaw rate smoothing
 
-        // yaw rate smoothing
+            // this really needs to control the yaw rate directly in the attitude pid controller
+            // but seems to work ok for now since the yaw rate cannot be controlled directly in auto mode
 
-        // this really needs to control the yaw rate directly in the attitude pid controller
-        // but seems to work ok for now since the yaw rate cannot be controlled directly in auto mode
+            _yaw_angle = get_bearing_to_next_waypoint(_navigator->get_global_position()->lat,
+                                                      _navigator->get_global_position()->lon,
+                                                      target_motion_with_offset.lat,
+                                                      target_motion_with_offset.lon);
+            //测试:使用领航机的航向角作为偏置方向的标准,测试通过后清屏蔽此行代码
+            _yaw_angle = _formation_positions[LEADER_ID].yaw;
+            _yaw_rate = wrap_pi((_yaw_angle - _navigator->get_global_position()->yaw) / (dt_ms / 1000.0f));
 
-        _yaw_angle = get_bearing_to_next_waypoint(_navigator->get_global_position()->lat,
-                                                  _navigator->get_global_position()->lon,
-                                                  target_motion_with_offset.lat,
-                                                  target_motion_with_offset.lon);
-        //测试:使用领航机的航向角作为偏置方向的标准,测试通过后清屏蔽此行代码
-        _yaw_angle = _formation_positions[LEADER_ID].yaw;
-        _yaw_rate = wrap_pi((_yaw_angle - _navigator->get_global_position()->yaw) / (dt_ms / 1000.0f));
+        } else {
+            _yaw_angle = _yaw_rate = NAN;
+            _yaw_angle = _formation_positions[LEADER_ID].yaw;
+        }
+        // clamp yaw rate smoothing if we are with in
+        // 3 degrees of facing target
+        if (PX4_ISFINITE(_yaw_rate)) {
+            if (fabsf(fabsf(_yaw_angle) - fabsf(_navigator->get_global_position()->yaw)) < math::radians(3.0F)) {
+                _yaw_rate = NAN;
+            }
+        }
+        if(hrt_elapsed_time(&_last_time) > 1e6) //1s
+        {
+            mavlink_log_info(_navigator->get_mavlink_log_pub(), "vel:%.1f,%.2f,%d,dist:%.1f,vel:%.1f,"
+                                                                "dalt:%.1f,sta:%d",
+                             (double)_current_vel(1), (double)_step_vel(1),_interpolation_points,
+                             (double)(_target_position_offset + _target_distance).length(),
+                             (double)_est_target_vel(1),
+                             (double)(_current_target_motion.alt - _navigator->get_global_position()->alt),
+                             _follow_target_state);
+            _time_updated = true;
+        }
+        // update state machine
+        switch (_follow_target_state) {
 
-    } else {
-        _yaw_angle = _yaw_rate = NAN;
-    }
-    //		warnx(" _step_vel x %3.6f y %3.6f cur vel %3.6f %3.6f tar vel %3.6f %3.6f dist = %3.6f (%3.6f) mode = %d yaw rate = %3.6f",
-    //				(double) _step_vel(0),
-    //				(double) _step_vel(1),
-    //				(double) _current_vel(0),
-    //				(double) _current_vel(1),
-    //				(double) _est_target_vel(0),
-    //				(double) _est_target_vel(1),
-    //				(double) (_target_distance).length(),
-    //				(double) (_target_position_offset + _target_distance).length(),
-    //				_follow_target_state,
-    //				(double) _yaw_rate);
+        case TRACK_POSITION: {
 
+                if (_radius_entered == true) {
+                    _follow_target_state = TRACK_VELOCITY;
 
-    // clamp yaw rate smoothing if we are with in
-    // 3 degrees of facing target
+                } else if (target_velocity_valid()) {
+                    set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
+                    // keep the current velocity updated with the target velocity for when it's needed
+                    _current_vel = _est_target_vel;
 
-    if (PX4_ISFINITE(_yaw_rate)) {
-        if (fabsf(fabsf(_yaw_angle) - fabsf(_navigator->get_global_position()->yaw)) < math::radians(3.0F)) {
-            _yaw_rate = NAN;
+                    update_position_sp(true, true, _yaw_rate);
+
+                } else {
+                    _follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
+                }
+
+                break;
+            }
+
+        case TRACK_VELOCITY: {
+
+                if (_radius_exited == true) {
+                    _follow_target_state = TRACK_POSITION;
+
+                } else if (target_velocity_valid()) {
+
+                    if ((float)(current_time - _last_update_time) / 1000.0f >= _step_time_in_ms) {
+                        _current_vel += _step_vel;
+                        _last_update_time = current_time;
+                    }
+
+                    set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
+
+                    update_position_sp(true, false, _yaw_rate);
+
+                } else {
+                    _follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
+                }
+
+                break;
+            }
+
+        case SET_WAIT_FOR_TARGET_POSITION: {
+
+                // Climb to the minimum altitude
+                // and wait until a position is received
+
+                follow_target_s target = {};
+
+                // for now set the target at the minimum height above the uav
+
+                target.lat = _navigator->get_global_position()->lat;
+                target.lon = _navigator->get_global_position()->lon;
+    //			set_follow_target_item(&_mission_item, _param_min_alt.get(), target, _yaw_angle);
+
+                //设置期望高度为当前高度(高度偏移min_clearance量为0)
+                target.alt = _navigator->get_global_position()->alt;
+                set_follow_target_item(&_mission_item, 0, target, _yaw_angle);
+
+                update_position_sp(false, false, _yaw_rate);
+
+                _follow_target_state = WAIT_FOR_TARGET_POSITION;
+            }
+
+        /* FALLTHROUGH */
+
+        case WAIT_FOR_TARGET_POSITION: {
+
+                if (is_mission_item_reached() && target_velocity_valid()) {
+                    _target_position_offset(0) = _follow_offset;
+                    _follow_target_state = TRACK_POSITION;
+                }
+
+                break;
+            }
         }
     }
+//    warnx(" _step_vel x %3.6f y %3.6f cur vel %3.6f %3.6f tar vel %3.6f %3.6f dist = %3.6f (%3.6f) mode = %d yaw rate = %3.6f",
+//          (double) _step_vel(0),
+//          (double) _step_vel(1),
+//          (double) _current_vel(0),
+//          (double) _current_vel(1),
+//          (double) _est_target_vel(0),
+//          (double) _est_target_vel(1),
+//          (double) (_target_distance).length(),
+//          (double) (_target_position_offset + _target_distance).length(),
+//          _follow_target_state,
+//          (double) _yaw_rate);
 
 
-   ///
+    ///
 #endif
-	// update state machine
+//	// update state machine
+//	switch (_follow_target_state) {
 
-	switch (_follow_target_state) {
+//	case TRACK_POSITION: {
 
-	case TRACK_POSITION: {
+//			if (_radius_entered == true) {
+//				_follow_target_state = TRACK_VELOCITY;
 
-			if (_radius_entered == true) {
-				_follow_target_state = TRACK_VELOCITY;
+//			} else if (target_velocity_valid()) {
+//                set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
+//				// keep the current velocity updated with the target velocity for when it's needed
+//				_current_vel = _est_target_vel;
 
-			} else if (target_velocity_valid()) {
-                set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
-				// keep the current velocity updated with the target velocity for when it's needed
-				_current_vel = _est_target_vel;
+//				update_position_sp(true, true, _yaw_rate);
 
-				update_position_sp(true, true, _yaw_rate);
+//			} else {
+//				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
+//			}
 
-			} else {
-				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
-			}
+//			break;
+//		}
 
-			break;
-		}
+//	case TRACK_VELOCITY: {
 
-	case TRACK_VELOCITY: {
+//			if (_radius_exited == true) {
+//				_follow_target_state = TRACK_POSITION;
 
-			if (_radius_exited == true) {
-				_follow_target_state = TRACK_POSITION;
+//			} else if (target_velocity_valid()) {
 
-			} else if (target_velocity_valid()) {
+//				if ((float)(current_time - _last_update_time) / 1000.0f >= _step_time_in_ms) {
+//                    _current_vel += _step_vel;
+//					_last_update_time = current_time;
+//				}
 
-				if ((float)(current_time - _last_update_time) / 1000.0f >= _step_time_in_ms) {
-                    _current_vel += _step_vel;
-					_last_update_time = current_time;
-				}
+//                set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
 
-                set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
+//				update_position_sp(true, false, _yaw_rate);
 
-				update_position_sp(true, false, _yaw_rate);
+//			} else {
+//				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
+//			}
 
-			} else {
-				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
-			}
+//			break;
+//		}
 
-			break;
-		}
+//	case SET_WAIT_FOR_TARGET_POSITION: {
 
-	case SET_WAIT_FOR_TARGET_POSITION: {
+//			// Climb to the minimum altitude
+//			// and wait until a position is received
 
-			// Climb to the minimum altitude
-			// and wait until a position is received
+//			follow_target_s target = {};
 
-			follow_target_s target = {};
+//			// for now set the target at the minimum height above the uav
 
-			// for now set the target at the minimum height above the uav
+//			target.lat = _navigator->get_global_position()->lat;
+//			target.lon = _navigator->get_global_position()->lon;
+////			set_follow_target_item(&_mission_item, _param_min_alt.get(), target, _yaw_angle);
 
-			target.lat = _navigator->get_global_position()->lat;
-			target.lon = _navigator->get_global_position()->lon;
-//			target.alt = 0.0F;
-//			set_follow_target_item(&_mission_item, _param_min_alt.get(), target, _yaw_angle);
+//            //设置期望高度为当前高度(高度偏移min_clearance量为0)
+//            target.alt = _navigator->get_global_position()->alt;
+//            set_follow_target_item(&_mission_item, 0, target, _yaw_angle);
 
-            //设置期望高度为当前高度(高度偏移min_clearance量为0)
-            target.alt = _navigator->get_global_position()->alt;
-            set_follow_target_item(&_mission_item, 0, target, _yaw_angle);
+//            update_position_sp(false, false, _yaw_rate);
 
-            update_position_sp(false, false, _yaw_rate);
+//			_follow_target_state = WAIT_FOR_TARGET_POSITION;
+//		}
 
-			_follow_target_state = WAIT_FOR_TARGET_POSITION;
-		}
+//	/* FALLTHROUGH */
 
-	/* FALLTHROUGH */
+//	case WAIT_FOR_TARGET_POSITION: {
 
-	case WAIT_FOR_TARGET_POSITION: {
+//			if (is_mission_item_reached() && target_velocity_valid()) {
+//				_target_position_offset(0) = _follow_offset;
+//				_follow_target_state = TRACK_POSITION;
+//			}
 
-			if (is_mission_item_reached() && target_velocity_valid()) {
-				_target_position_offset(0) = _follow_offset;
-				_follow_target_state = TRACK_POSITION;
-			}
-
-			break;
-		}
-	}
+//			break;
+//		}
+//	}
 }
 
 void FollowTarget::update_position_sp(bool use_velocity, bool use_position, float yaw_rate)

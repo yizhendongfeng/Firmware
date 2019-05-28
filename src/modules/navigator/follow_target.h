@@ -53,7 +53,7 @@
 #define FORMATION
 //#define FORMATIONTEST   //调试navigator start会切换到跟踪模式,注释后通过地面站切换到跟踪模式
 #define YAWTEST
-#define VIRTUALTEST
+//#define VIRTUALTEST
 extern const mavlink_system_t mavlink_system;
 class FollowTarget : public MissionBlock, public ModuleParams
 {
@@ -69,8 +69,8 @@ public:
 private:
 
 	static constexpr int TARGET_TIMEOUT_MS = 2500;
-	static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 5;
-	static constexpr int INTERPOLATION_PNTS = 20;
+    static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 3;//5
+    static constexpr int INTERPOLATION_PNTS = 4;//20
 	static constexpr float FF_K = .25F;
 	static constexpr float OFFSET_M = 8;
     const uint8_t LEADER_ID = 1;
