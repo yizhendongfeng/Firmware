@@ -29,6 +29,7 @@ set(config_module_list
 	drivers/imu/lsm303d
 	drivers/imu/mpu6000
 	drivers/imu/mpu9250
+	#drivers/imu/icm20948	#zjm
 	drivers/irlock
 	drivers/mkblctrl
 	drivers/oreoled
@@ -116,7 +117,8 @@ set(config_module_list
 	modules/mc_att_control
 	modules/mc_pos_control
 	modules/vtol_att_control
-
+	# harpoon sysytem control   ***zjm
+	modules/harpoon
 	#
 	# Logging
 	#
