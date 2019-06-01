@@ -58,7 +58,6 @@
 using matrix::wrap_pi;
 
 constexpr float FollowTarget::_follow_position_matricies[4][9];
-#define TESTANGLE 0.0f
 FollowTarget::FollowTarget(Navigator *navigator) :
 	MissionBlock(navigator),
 	ModuleParams(navigator)
@@ -94,7 +93,8 @@ void FollowTarget::on_activation()
 		_follow_target_sub = orb_subscribe(ORB_ID(follow_target));
 	}
 #ifdef FORMATION
-    _last_time = hrt_absolute_time();
+    _info_last_time = hrt_absolute_time();
+    _last_execution_time = hrt_absolute_time();
     ///订阅其他飞机位置信息        ***zjm
     for(int i = 0; i < 4; i++)
     {
@@ -107,163 +107,25 @@ void FollowTarget::on_activation()
         _prev_time = hrt_absolute_time();
         _follow_offset = _param_tracking_dist.get();
     #endif
+    _descend_alt = 0;
+    _enter_land_radius = false;
 #endif
+    //订阅遥控器信号
+    _manual_sp_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
 }
 
 void FollowTarget::on_active()
 {
-#ifndef FORMATION
-    struct map_projection_reference_s target_ref;
-    follow_target_s target_motion_with_offset = {};
-    uint64_t current_time = hrt_absolute_time();
-    bool _radius_entered = false;
-    bool _radius_exited = false;
-    bool updated = false;
-    float dt_ms = 0;
-	orb_check(_follow_target_sub, &updated);
-
-	if (updated) {
-		follow_target_s target_motion;
-
-		_target_updates++;
-
-		// save last known motion topic
-
-		_previous_target_motion = _current_target_motion;
-
-		orb_copy(ORB_ID(follow_target), _follow_target_sub, &target_motion);
-
-		if (_current_target_motion.timestamp == 0) {
-			_current_target_motion = target_motion;
-		}
-
-		_current_target_motion.timestamp = target_motion.timestamp;
-		_current_target_motion.lat = (_current_target_motion.lat * (double)_responsiveness) + target_motion.lat * (double)(
-						     1 - _responsiveness);
-		_current_target_motion.lon = (_current_target_motion.lon * (double)_responsiveness) + target_motion.lon * (double)(
-						     1 - _responsiveness);
-
-	} else if (((current_time - _current_target_motion.timestamp) / 1000) > TARGET_TIMEOUT_MS && target_velocity_valid()) {
-		reset_target_validity();
-	}
-
-	// update distance to target
-
-	if (target_position_valid()) {
-
-		// get distance to target
-
-		map_projection_init(&target_ref, _navigator->get_global_position()->lat, _navigator->get_global_position()->lon);
-		map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon, &_target_distance(0),
-				       &_target_distance(1));
-
-	}
-
-	// update target velocity
-
-	if (target_velocity_valid() && updated) {
-
-		dt_ms = ((_current_target_motion.timestamp - _previous_target_motion.timestamp) / 1000);
-
-		// ignore a small dt
-		if (dt_ms > 10.0F) {
-			// get last gps known reference for target
-			map_projection_init(&target_ref, _previous_target_motion.lat, _previous_target_motion.lon);
-
-			// calculate distance the target has moved
-			map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon,
-					       &(_target_position_delta(0)), &(_target_position_delta(1)));
-
-			// update the average velocity of the target based on the position
-			_est_target_vel = _target_position_delta / (dt_ms / 1000.0f);
-
-			// if the target is moving add an offset and rotation
-			if (_est_target_vel.length() > .5F) {
-				_target_position_offset = _rot_matrix * _est_target_vel.normalized() * _follow_offset;
-			}
-
-			// are we within the target acceptance radius?
-			// give a buffer to exit/enter the radius to give the velocity controller
-			// a chance to catch up
-
-			_radius_exited = ((_target_position_offset + _target_distance).length() > (float) TARGET_ACCEPTANCE_RADIUS_M * 1.5f);
-			_radius_entered = ((_target_position_offset + _target_distance).length() < (float) TARGET_ACCEPTANCE_RADIUS_M);
-
-			// to keep the velocity increase/decrease smooth
-			// calculate how many velocity increments/decrements
-			// it will take to reach the targets velocity
-			// with the given amount of steps also add a feed forward input that adjusts the
-			// velocity as the position gap increases since
-			// just traveling at the exact velocity of the target will not
-			// get any closer or farther from the target
-
-			_step_vel = (_est_target_vel - _current_vel) + (_target_position_offset + _target_distance) * FF_K;
-			_step_vel /= (dt_ms / 1000.0F * (float) INTERPOLATION_PNTS);
-			_step_time_in_ms = (dt_ms / (float) INTERPOLATION_PNTS);
-
-			// if we are less than 1 meter from the target don't worry about trying to yaw
-			// lock the yaw until we are at a distance that makes sense
-
-			if ((_target_distance).length() > 1.0F) {
-
-				// yaw rate smoothing
-
-				// this really needs to control the yaw rate directly in the attitude pid controller
-				// but seems to work ok for now since the yaw rate cannot be controlled directly in auto mode
-
-				_yaw_angle = get_bearing_to_next_waypoint(_navigator->get_global_position()->lat,
-						_navigator->get_global_position()->lon,
-						_current_target_motion.lat,
-						_current_target_motion.lon);
-
-				_yaw_rate = wrap_pi((_yaw_angle - _navigator->get_global_position()->yaw) / (dt_ms / 1000.0f));
-
-			} else {
-				_yaw_angle = _yaw_rate = NAN;
-			}
-		}
-
-//		warnx(" _step_vel x %3.6f y %3.6f cur vel %3.6f %3.6f tar vel %3.6f %3.6f dist = %3.6f (%3.6f) mode = %d yaw rate = %3.6f",
-//				(double) _step_vel(0),
-//				(double) _step_vel(1),
-//				(double) _current_vel(0),
-//				(double) _current_vel(1),
-//				(double) _est_target_vel(0),
-//				(double) _est_target_vel(1),
-//				(double) (_target_distance).length(),
-//				(double) (_target_position_offset + _target_distance).length(),
-//				_follow_target_state,
-//				(double) _yaw_rate);
-	}
-
-	if (target_position_valid()) {
-
-		// get the target position using the calculated offset
-
-		map_projection_init(&target_ref,  _current_target_motion.lat, _current_target_motion.lon);
-		map_projection_reproject(&target_ref, _target_position_offset(0), _target_position_offset(1),
-					 &target_motion_with_offset.lat, &target_motion_with_offset.lon);
-	}
-
-	// clamp yaw rate smoothing if we are with in
-	// 3 degrees of facing target
-
-	if (PX4_ISFINITE(_yaw_rate)) {
-		if (fabsf(fabsf(_yaw_angle) - fabsf(_navigator->get_global_position()->yaw)) < math::radians(3.0F)) {
-			_yaw_rate = NAN;
-		}
-	}
-#else
     struct map_projection_reference_s target_ref;
     follow_target_s target_motion_with_offset = {};
     uint64_t current_time = hrt_absolute_time();
     bool _radius_entered = false;
     bool _radius_exited = false;
     float dt_ms = 0;
-    if(_time_updated)
+    if(_info_time_updated)
     {
-        _last_time = hrt_absolute_time();
-        _time_updated = false;
+        _info_last_time = hrt_absolute_time();
+        _info_time_updated = false;
     }
 
     //    PX4_INFO("In on_active current_time:%llu", current_time);
@@ -291,6 +153,13 @@ void FollowTarget::on_active()
             PX4_INFO("i:%d,receive sysid:%d pos, current_time:%llu, leader_updated:%d",
                      i, formation_pos.sysid, current_time, pos_updated[formation_pos.sysid]);
         }
+    }
+    //接收遥控器信号
+    bool manual_updated = false;
+    orb_check(_manual_sp_sub, &manual_updated);
+    if(manual_updated)
+    {
+        orb_copy(ORB_ID(manual_control_setpoint), _manual_sp_sub, &_manual_sp);
     }
 
 #ifdef VIRTUALTEST
@@ -386,6 +255,23 @@ void FollowTarget::on_active()
             _radius_exited = ((_target_position_offset + _target_distance).length() > (float) TARGET_ACCEPTANCE_RADIUS_M * 1.5f);
             _radius_entered = ((_target_position_offset + _target_distance).length() < (float) TARGET_ACCEPTANCE_RADIUS_M);
 
+            if((_target_position_offset + _target_distance).length() < LAND_ACCEPTANCE_RADIUS_M)
+            {
+                if(!_enter_land_radius)//
+                {
+                    _enter_land_radius = true;
+                    _last_landing_time = hrt_absolute_time();
+                }
+                if(current_time - _last_landing_time > 3*1e6)//保持3s
+                {
+                    _ready_to_land = true;
+                }
+            }
+            else
+            {
+                _enter_land_radius = false;
+                _ready_to_land = false;
+            }
             // to keep the velocity increase/decrease smooth
             // calculate how many velocity increments/decrements
             // it will take to reach the targets velocity
@@ -473,16 +359,15 @@ void FollowTarget::on_active()
                 _yaw_rate = NAN;
             }
         }
-        if(hrt_elapsed_time(&_last_time) > 1e6) //1s
+        if(hrt_elapsed_time(&_info_last_time) > 1e6) //1s
         {
-            mavlink_log_info(_navigator->get_mavlink_log_pub(), "vel:%.1f,%.2f,%d,dist:%.1f,vel:%.1f,"
-                                                                "dalt:%.1f,sta:%d",
-                             (double)_current_vel(1), (double)_step_vel(1),_interpolation_points,
+            mavlink_log_info(_navigator->get_mavlink_log_pub(), "cv:%.1f,dist:%.1f,tv:%.1f,dalt:%.1f,sta:%d,land:%d",
+                             (double)_current_vel.length(),
                              (double)(_target_position_offset + _target_distance).length(),
-                             (double)_est_target_vel(1),
+                             (double)_est_target_vel.length(),
                              (double)(_current_target_motion.alt - _navigator->get_global_position()->alt),
-                             _follow_target_state);
-            _time_updated = true;
+                             _follow_target_state,_ready_to_land);
+            _info_time_updated = true;
         }
         // update state machine
         switch (_follow_target_state) {
@@ -517,8 +402,24 @@ void FollowTarget::on_active()
                         _current_vel += _step_vel;
                         _last_update_time = current_time;
                     }
-
-                    set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
+                    float delta_alt = _param_min_alt.get();
+                    if(_manual_sp.aux2 > -0.5f)//降落至无人船上，开关量为-0.8（上）, 0（中）, 0.9（下）
+                    {
+                        if(_ready_to_land)
+                        {
+                            _descend_alt += DESCEND_VEL * (float)((current_time - _last_execution_time) * 1e-6);
+                            delta_alt = _param_min_alt.get() - _descend_alt;
+                            delta_alt = delta_alt > -1.0f ? delta_alt : -1.0f;    //最多比起降网低1m，防止因位置偏差落入水中
+                        }
+                        else
+                            delta_alt = 1;//不满足降落条件时保持在目标上方1m
+                    }
+                    else
+                    {
+                        _descend_alt = 0;
+                        delta_alt = _param_min_alt.get();
+                    }
+                    set_follow_target_item(&_mission_item, delta_alt, target_motion_with_offset, _yaw_angle);
 
                     update_position_sp(true, false, _yaw_rate);
 
@@ -540,7 +441,6 @@ void FollowTarget::on_active()
 
                 target.lat = _navigator->get_global_position()->lat;
                 target.lon = _navigator->get_global_position()->lon;
-    //			set_follow_target_item(&_mission_item, _param_min_alt.get(), target, _yaw_angle);
 
                 //设置期望高度为当前高度(高度偏移min_clearance量为0)
                 target.alt = _navigator->get_global_position()->alt;
@@ -564,6 +464,7 @@ void FollowTarget::on_active()
             }
         }
     }
+    _last_execution_time = current_time;
 //    warnx(" _step_vel x %3.6f y %3.6f cur vel %3.6f %3.6f tar vel %3.6f %3.6f dist = %3.6f (%3.6f) mode = %d yaw rate = %3.6f",
 //          (double) _step_vel(0),
 //          (double) _step_vel(1),
@@ -575,89 +476,6 @@ void FollowTarget::on_active()
 //          (double) (_target_position_offset + _target_distance).length(),
 //          _follow_target_state,
 //          (double) _yaw_rate);
-
-
-    ///
-#endif
-//	// update state machine
-//	switch (_follow_target_state) {
-
-//	case TRACK_POSITION: {
-
-//			if (_radius_entered == true) {
-//				_follow_target_state = TRACK_VELOCITY;
-
-//			} else if (target_velocity_valid()) {
-//                set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
-//				// keep the current velocity updated with the target velocity for when it's needed
-//				_current_vel = _est_target_vel;
-
-//				update_position_sp(true, true, _yaw_rate);
-
-//			} else {
-//				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
-//			}
-
-//			break;
-//		}
-
-//	case TRACK_VELOCITY: {
-
-//			if (_radius_exited == true) {
-//				_follow_target_state = TRACK_POSITION;
-
-//			} else if (target_velocity_valid()) {
-
-//				if ((float)(current_time - _last_update_time) / 1000.0f >= _step_time_in_ms) {
-//                    _current_vel += _step_vel;
-//					_last_update_time = current_time;
-//				}
-
-//                set_follow_target_item(&_mission_item, _param_min_alt.get(), target_motion_with_offset, _yaw_angle);
-
-//				update_position_sp(true, false, _yaw_rate);
-
-//			} else {
-//				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
-//			}
-
-//			break;
-//		}
-
-//	case SET_WAIT_FOR_TARGET_POSITION: {
-
-//			// Climb to the minimum altitude
-//			// and wait until a position is received
-
-//			follow_target_s target = {};
-
-//			// for now set the target at the minimum height above the uav
-
-//			target.lat = _navigator->get_global_position()->lat;
-//			target.lon = _navigator->get_global_position()->lon;
-////			set_follow_target_item(&_mission_item, _param_min_alt.get(), target, _yaw_angle);
-
-//            //设置期望高度为当前高度(高度偏移min_clearance量为0)
-//            target.alt = _navigator->get_global_position()->alt;
-//            set_follow_target_item(&_mission_item, 0, target, _yaw_angle);
-
-//            update_position_sp(false, false, _yaw_rate);
-
-//			_follow_target_state = WAIT_FOR_TARGET_POSITION;
-//		}
-
-//	/* FALLTHROUGH */
-
-//	case WAIT_FOR_TARGET_POSITION: {
-
-//			if (is_mission_item_reached() && target_velocity_valid()) {
-//				_target_position_offset(0) = _follow_offset;
-//				_follow_target_state = TRACK_POSITION;
-//			}
-
-//			break;
-//		}
-//	}
 }
 
 void FollowTarget::update_position_sp(bool use_velocity, bool use_position, float yaw_rate)

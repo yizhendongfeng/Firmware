@@ -49,6 +49,9 @@
 #include <px4_module_params.h>
 #include <uORB/topics/follow_target.h>
 #include <uORB/topics/formation_position.h>
+#include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/land_on_target.h>
+
 #include <v2.0/mavlink_types.h>
 #define FORMATION
 //#define FORMATIONTEST   //调试navigator start会切换到跟踪模式,注释后通过地面站切换到跟踪模式
@@ -70,9 +73,11 @@ private:
 
 	static constexpr int TARGET_TIMEOUT_MS = 2500;
     static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 3;//5
+    static constexpr float LAND_ACCEPTANCE_RADIUS_M = 0.5f;//距离目标0.5m以内开始降落
+    static constexpr float DESCEND_VEL = 0.2f;//降落速度m/s
     static constexpr int INTERPOLATION_PNTS = 4;//20
 	static constexpr float FF_K = .25F;
-	static constexpr float OFFSET_M = 8;
+    static constexpr float OFFSET_M = 8;
     const uint8_t LEADER_ID = 1;
 	enum FollowTargetState {
 		TRACK_POSITION,
@@ -99,21 +104,24 @@ private:
 		(ParamFloat<px4::params::NAV_MIN_FT_HT>)	_param_min_alt,
 		(ParamFloat<px4::params::NAV_FT_DST>) _param_tracking_dist,
 		(ParamInt<px4::params::NAV_FT_FS>) _param_tracking_side,
-		(ParamFloat<px4::params::NAV_FT_RS>) _param_tracking_resp
+        (ParamFloat<px4::params::NAV_FT_RS>) _param_tracking_resp//,
+        //(ParamFloat<px4::params::NAV_FT_ORIENTATION>) _param_Orientation
 	)
 
 	FollowTargetState _follow_target_state{SET_WAIT_FOR_TARGET_POSITION};
 	int _follow_target_position{FOLLOW_FROM_BEHIND};
 
 	int _follow_target_sub{-1};
-    uint64_t _last_time{0}; //输出到地面站消息定时器
+    uint64_t _info_last_time{0}; //输出到地面站消息定时器
     uint64_t _prev_time{0}; //计算循环间隔
-    bool _time_updated{false};
+    bool _info_time_updated{false};
 	float _step_time_in_ms{0.0f};
 	float _follow_offset{OFFSET_M};
 
 	uint64_t _target_updates{0};
 	uint64_t _last_update_time{0};
+    uint64_t _last_landing_time{0}; //计算处于保持在可降范围的时间
+    uint64_t _last_execution_time{0}; //计算处于保持在可降范围的时间
 
 	matrix::Vector3f _current_vel;
 	matrix::Vector3f _step_vel;
@@ -135,6 +143,11 @@ private:
         follow_target_s _virtual_target{};  //以返航点为基础以固定速度产生虚拟期望点
         bool _prev_time_updated{false};
     #endif
+    bool _ready_to_land;//在目标点0.5m以内保持3s为真，开始降落
+    bool _enter_land_radius = false;  //进入
+    float _descend_alt = 0.0f;
+    int _manual_sp_sub = -1;
+    manual_control_setpoint_s _manual_sp = {};
 #endif
 	float _yaw_rate{0.0f};
 	float _responsiveness{0.0f};
