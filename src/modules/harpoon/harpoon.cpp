@@ -47,15 +47,15 @@
 #include <uORB/topics/manual_control_setpoint.h>
 
 #include <drivers/drv_hrt.h>
-
+#include <systemlib/mavlink_log.h>
 #include <float.h>
 #include <string.h>
 #include <termios.h>
 
-#define DRAWBACK 1
-#define STRETCHOUT 2
-#define TAKEOFF 1   //可以起飞
-#define LAND 3      //可以降落
+#define UP 1
+#define UPSTOP 11//可以起飞
+#define DOWN 2
+#define DOWNSTOP 22//可以降落
 /**
  * daemon management function.
  */
@@ -83,9 +83,11 @@ static int harpoon_task;				/**< Handle of daemon task / thread */
 int harpoon_thread_main(int argc, char *argv[])
 {
     warnx("[daemon] starting\n");
+    orb_advert_t	_mavlink_log_pub{nullptr};	/**< the uORB advert to send messages over mavlink */
     int uart_fd= -1;
-    char harpoon_cmd = 0;   //1:起飞，2:降落
-    char harpoon_status = 0;//0:向上运动，1:已收回可以起飞; 2:向下运动，3:已放下可以降落，
+    char harpoon_cmd = -1;   //1:起飞，2:降落
+    unsigned char harpoon_status = -1;//0:向上运动，1:已收回可以起飞; 2:向下运动，3:已放下可以降落，
+    char byteReaded = -1;
     //订阅遥控器信号
     int manual_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
     manual_control_setpoint_s manual_sp = {};
@@ -112,29 +114,48 @@ int harpoon_thread_main(int argc, char *argv[])
     }
     thread_running = true;
     while (!thread_should_exit) {
-        read(uart_fd, &harpoon_status, 1);
+        int readSize = read(uart_fd, &byteReaded, 1);
+        PX4_INFO("readSize:%d,harpoon_status:%d",readSize,byteReaded);
+        if(readSize)
+        {
+            if(harpoon_status != byteReaded)
+            {
+                harpoon_status = byteReaded;
+                if(harpoon_status == UP){
+                    mavlink_log_info(&_mavlink_log_pub, "harpoon retracting...");
+                }
+                if(harpoon_status == UPSTOP){
+                    mavlink_log_info(&_mavlink_log_pub, "harpoon retracted!");
+                }
+                else if(harpoon_status == DOWN){
+                    mavlink_log_info(&_mavlink_log_pub, "harpoon stretching out...");
+                }
+                else if(harpoon_status == DOWNSTOP){
+                    mavlink_log_info(&_mavlink_log_pub, "harpoon stretched out!");
+                }
+            }
+        }
 
         bool manual_updated = false;
         orb_check(manual_sub, &manual_updated);
         if(manual_updated)
         {
-            PX4_INFO("manual_sp.gear_switch:%d, harpoon_status:%d",manual_sp.gear_switch,harpoon_status);
+            PX4_INFO("manual_sp.gear_switch:%d,manual_sp.aux2:%.1f, harpoon_status:%d",manual_sp.gear_switch, (double)manual_sp.aux2, harpoon_status);
             orb_copy(ORB_ID(manual_control_setpoint), manual_sub, &manual_sp);
             //当收到收起命令且鱼叉状态不为已收起则收起鱼叉
-            if(manual_sp.gear_switch == manual_control_setpoint_s::SWITCH_POS_OFF && harpoon_status != TAKEOFF)
+            if(manual_sp.gear_switch == manual_control_setpoint_s::SWITCH_POS_ON && harpoon_status != UPSTOP)
             {
-                harpoon_cmd = DRAWBACK;
+                harpoon_cmd = UP;
                 write(uart_fd, &harpoon_cmd, 1);
             }
             //当收到伸出命令且鱼叉状态不为已伸出则伸出鱼叉
-            else if(manual_sp.gear_switch == manual_control_setpoint_s::SWITCH_POS_ON && harpoon_status != LAND)
+            else if(manual_sp.gear_switch == manual_control_setpoint_s::SWITCH_POS_OFF && harpoon_status != DOWNSTOP)
             {
-                harpoon_cmd = STRETCHOUT;
+                harpoon_cmd = DOWN;
                 write(uart_fd, &harpoon_cmd, 1);
             }
         }
-
-        usleep(500000);//500ms
+        usleep(50000);//50ms
     }
     warnx("[daemon] exiting.\n");
 
@@ -236,12 +257,12 @@ int harpoon_main(int argc, char *argv[])
         }
 
         thread_should_exit = false;
-        harpoon_task = px4_task_spawn_cmd("leader_uav",
-                                                SCHED_DEFAULT,
-                                                SCHED_PRIORITY_DEFAULT,
-                                                2000,
-                                                harpoon_thread_main,
-                                                (argv) ? (char *const *)&argv[2] : (char *const *)NULL);
+        harpoon_task = px4_task_spawn_cmd("harpoon",
+                                          SCHED_DEFAULT,
+                                          SCHED_PRIORITY_DEFAULT,
+                                          2000,
+                                          harpoon_thread_main,
+                                          (argv) ? (char *const *)&argv[2] : (char *const *)NULL);
         return 0;
     }
 

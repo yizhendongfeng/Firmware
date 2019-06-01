@@ -72,7 +72,6 @@ void
 LandDetector::_cycle_trampoline(void *arg)
 {
 	LandDetector *dev = reinterpret_cast<LandDetector *>(arg);
-
 	dev->_cycle();
 }
 
