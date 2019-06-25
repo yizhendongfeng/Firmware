@@ -68,6 +68,9 @@ PrecLand::PrecLand(Navigator *navigator) :
 void
 PrecLand::on_activation()
 {
+    mavlink_log_info(_navigator->get_mavlink_log_pub(), "preclanding");
+    _last_updated_time = hrt_absolute_time();
+//    _mavlog_timeout = false;
 	// We need to subscribe here and not in the constructor because constructor is called before the navigator task is spawned
 	if (_target_pose_sub < 0) {
 		_target_pose_sub = orb_subscribe(ORB_ID(landing_target_pose));
@@ -113,6 +116,15 @@ PrecLand::on_active()
 	if (_target_pose_updated) {
 		orb_copy(ORB_ID(landing_target_pose), _target_pose_sub, &_target_pose);
 		_target_pose_valid = true;
+        PX4_INFO("x:%.2f,xabs:%.2f,y:%.2f,yabs:%.2f,z:%.2f",(double)_target_pose.x_rel, (double)_target_pose.x_abs,
+        (double)_target_pose.y_rel,(double)_target_pose.y_abs,  (double)_target_pose.z_rel);
+        if(hrt_elapsed_time(&_last_updated_time) > 1e6)
+        {
+            mavlink_log_info(_navigator->get_mavlink_log_pub(), "x:%.2f,xabs:%.2f,y:%.2f,yabs:%.2f,z:%.2f",
+                             (double)_target_pose.x_rel, (double)_target_pose.x_abs, (double)_target_pose.y_rel,
+                             (double)_target_pose.y_abs,  (double)_target_pose.z_rel);
+            _last_updated_time = hrt_absolute_time();
+        }
 	}
 
 	if ((hrt_elapsed_time(&_target_pose.timestamp) / 1e6f) > _param_timeout.get()) {

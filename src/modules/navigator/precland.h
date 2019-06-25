@@ -47,7 +47,7 @@
 
 #include "navigator_mode.h"
 #include "mission_block.h"
-
+//#define PRECLANDTEST    //启动线程后自动进入精准降落状态
 enum class PrecLandState {
 	Start, // Starting state
 	HorizontalApproach, // Positioning over landing target while maintaining altitude
@@ -110,7 +110,8 @@ private:
 	uint64_t _last_slewrate_time{0}; /**< time when we last limited setpoint changes */
 	uint64_t _target_acquired_time{0}; /**< time when we first saw the landing target during search */
 	uint64_t _point_reached_time{0}; /**< time when we reached a setpoint */
-
+    hrt_abstime _last_updated_time{0};
+//    bool _mavlog_timeout{false};
 	int _search_cnt{0}; /**< counter of how many times we had to search for the landing target */
 	float _approach_alt{0.0f}; /**< altitude at which to stay during horizontal approach */
 
