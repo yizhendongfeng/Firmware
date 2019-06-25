@@ -737,13 +737,18 @@ Navigator::run()
 		}
 
 		_navigation_mode = navigation_mode_new;
-#ifndef FORMATIONTEST
-		/* iterate through navigation modes and set active/inactive for each */
-		for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
-			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
-		}
-#else
+#if defined(FORMATIONTEST) || defined(PRECLANDTEST)
+    #ifdef FORMATIONTEST
         _navigation_mode_array[10]->run(true);  //开始跟踪目标    zjm
+    #endif
+    #ifdef PRECLANDTEST
+        _navigation_mode_array[9]->run(true);  //开始精准降落    zjm
+    #endif
+#else
+        /* iterate through navigation modes and set active/inactive for each */
+        for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
+            _navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
+        }
 #endif
 		/* if we landed and have not received takeoff setpoint then stay in idle */
 		if (_land_detected.landed &&
