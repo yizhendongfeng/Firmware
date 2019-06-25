@@ -87,6 +87,10 @@ then
 	# V3 build hwtypecmp supports V2|V2M|V30
 	if ver hwtypecmp V30
 	then
+		#BZUAV external compasse rotated 90 degrees. added by zjm
+		ist8310 -R 2 -C start
+		#BZUAV start irlock in pixhawk cube zjm
+		irlock start -b 2
 		# Check for Pixhawk 2.0 cube
 		# external MPU6K is rotated 180 degrees yaw
 		if mpu6000 -S -R 4 start
@@ -393,9 +397,10 @@ fi
 # mb12xx sonar sensor
 if param greater SENS_EN_MB12XX 0
 then
-	mb12xx start
+	mb12xx start -a
 fi
-
+#start irlock zjm
+irlock start
 # teraranger one tof sensor
 if param greater SENS_EN_TRANGER 0
 then

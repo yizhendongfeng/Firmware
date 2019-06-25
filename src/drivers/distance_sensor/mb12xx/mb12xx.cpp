@@ -72,7 +72,7 @@
 #include <board_config.h>
 
 /* Configuration Constants */
-#define MB12XX_BUS 		PX4_I2C_BUS_EXPANSION
+#define MB12XX_BUS_DEFAULT 		PX4_I2C_BUS_EXPANSION
 #define MB12XX_BASEADDR 	0x70 /* 7-bit address. 8-bit address is 0xE0 */
 #define MB12XX_DEVICE_PATH	"/dev/mb12xx"
 
@@ -92,12 +92,11 @@
 #ifndef CONFIG_SCHED_WORKQUEUE
 # error This requires CONFIG_SCHED_WORKQUEUE.
 #endif
-
 class MB12XX : public device::I2C
 {
 public:
 	MB12XX(uint8_t rotation = distance_sensor_s::ROTATION_DOWNWARD_FACING,
-	       int bus = MB12XX_BUS, int address = MB12XX_BASEADDR);
+           int bus = MB12XX_BUS_DEFAULT, int address = MB12XX_BASEADDR);
 	virtual ~MB12XX();
 
 	virtual int 		init();
@@ -685,58 +684,93 @@ namespace mb12xx
 
 MB12XX	*g_dev;
 
-void	start(uint8_t rotation);
+int 	start(uint8_t rotation);
+int 	start_bus(uint8_t rotation, int i2c_bus);
 void	stop();
 void	test();
 void	reset();
 void	info();
 
 /**
- * Start the driver.
+ *
+ * Attempt to start driver on all available I2C busses.
+ *
+ * This function will return as soon as the first sensor
+ * is detected on one of the available busses or if no
+ * sensors are detected.
+ *
  */
-void
+int
 start(uint8_t rotation)
 {
-	int fd;
+    if (g_dev != nullptr) {
+        PX4_ERR("already started");
+        return PX4_ERROR;
+    }
 
-	if (g_dev != nullptr) {
-		errx(1, "already started");
-	}
+    for (unsigned i = 0; i < NUM_I2C_BUS_OPTIONS; i++) {
+        if (start_bus(rotation, i2c_bus_options[i]) == PX4_OK) {
+            return PX4_OK;
+        }
+    }
 
-	/* create the driver */
-	g_dev = new MB12XX(rotation, MB12XX_BUS);
+    return PX4_ERROR;
+}
 
-	if (g_dev == nullptr) {
-		goto fail;
-	}
+/**
+ * Start the driver on a specific bus.
+ *
+ * This function only returns if the sensor is up and running
+ * or could not be detected successfully.
+ */
+int
+start_bus(uint8_t rotation, int i2c_bus)
+{
+    int fd = -1;
 
-	if (OK != g_dev->init()) {
-		goto fail;
-	}
+    if (g_dev != nullptr) {
+        PX4_ERR("already started");
+        return PX4_ERROR;
+    }
 
-	/* set the poll rate to default, starts automatic data collection */
-	fd = open(MB12XX_DEVICE_PATH, O_RDONLY);
+    /* create the driver */
+    g_dev = new MB12XX(rotation, i2c_bus);
 
-	if (fd < 0) {
-		goto fail;
-	}
+    if (g_dev == nullptr) {
+        goto fail;
+    }
 
-	if (ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
-		goto fail;
-	}
+    if (OK != g_dev->init()) {
+        goto fail;
+    }
 
-	exit(0);
+    /* set the poll rate to default, starts automatic data collection */
+    fd = px4_open(MB12XX_DEVICE_PATH, O_RDONLY);
+
+    if (fd < 0) {
+        goto fail;
+    }
+
+    if (ioctl(fd, SENSORIOCSPOLLRATE, SENSOR_POLLRATE_DEFAULT) < 0) {
+        goto fail;
+    }
+
+    px4_close(fd);
+    return PX4_OK;
 
 fail:
 
-	if (g_dev != nullptr) {
-		delete g_dev;
-		g_dev = nullptr;
-	}
+    if (fd >= 0) {
+        px4_close(fd);
+    }
 
-	errx(1, "driver start failed");
+    if (g_dev != nullptr) {
+        delete g_dev;
+        g_dev = nullptr;
+    }
+
+    return PX4_ERROR;
 }
-
 /**
  * Stop the driver
  */
@@ -856,6 +890,17 @@ info()
 }
 
 } /* namespace */
+static void
+mb12xx2_usage()
+{
+    PX4_INFO("usage: mb12xx command [options]");
+    PX4_INFO("options:");
+    PX4_INFO("\t-b --bus i2cbus (%d)", MB12XX_BUS_DEFAULT);
+    PX4_INFO("\t-a --all");
+    PX4_INFO("\t-R --rotation (%d)", distance_sensor_s::ROTATION_DOWNWARD_FACING);
+    PX4_INFO("command:");
+    PX4_INFO("\tstart|stop|test|reset|info");
+}
 
 int
 mb12xx_main(int argc, char *argv[])
@@ -864,13 +909,21 @@ mb12xx_main(int argc, char *argv[])
 	int myoptind = 1;
 	const char *myoptarg = nullptr;
 	uint8_t rotation = distance_sensor_s::ROTATION_DOWNWARD_FACING;
-
-	while ((ch = px4_getopt(argc, argv, "R:", &myoptind, &myoptarg)) != EOF) {
+    bool start_all = false;
+    int i2c_bus = MB12XX_BUS_DEFAULT;
+    while ((ch = px4_getopt(argc, argv, "ab:R:", &myoptind, &myoptarg)) != EOF) {
 		switch (ch) {
 		case 'R':
 			rotation = (uint8_t)atoi(myoptarg);
 			break;
 
+        case 'b':
+            i2c_bus = atoi(myoptarg);
+            break;
+
+        case 'a':
+            start_all = true;
+            break;
 		default:
 			PX4_WARN("Unknown option!");
 			return -1;
@@ -885,7 +938,13 @@ mb12xx_main(int argc, char *argv[])
 	 * Start/load the driver.
 	 */
 	if (!strcmp(argv[myoptind], "start")) {
-		mb12xx::start(rotation);
+//		mb12xx::start(rotation);
+        if (start_all) {
+            return mb12xx::start(rotation);
+
+        } else {
+            return mb12xx::start_bus(rotation, i2c_bus);
+        }
 	}
 
 	/*
@@ -917,6 +976,7 @@ mb12xx_main(int argc, char *argv[])
 	}
 
 out_error:
-	PX4_ERR("unrecognized command, try 'start', 'test', 'reset' or 'info'");
+//	PX4_ERR("unrecognized command, try 'start', 'test', 'reset' or 'info'");
+    mb12xx2_usage();
 	return PX4_ERROR;
 }

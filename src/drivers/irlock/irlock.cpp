@@ -53,7 +53,7 @@
 #include <drivers/device/ringbuffer.h>
 #include <drivers/drv_irlock.h>
 #include <drivers/drv_hrt.h>
-
+#include <px4_getopt.h>
 #include <nuttx/clock.h>
 #include <nuttx/wqueue.h>
 #include <systemlib/err.h>
@@ -450,16 +450,32 @@ int irlock_main(int argc, char *argv[])
 	int i2cdevice = IRLOCK_I2C_BUS;
 
 	/** jump over start/off/etc and look at options first **/
-	if (getopt(argc, argv, "b:") != EOF) {
-		i2cdevice = (int)strtol(optarg, NULL, 0);
-	}
+//	if (getopt(argc, argv, "b:") != EOF) {
+//		i2cdevice = (int)strtol(optarg, NULL, 0);
+//        errx(1, "i2cdevice:%d",i2cdevice);
+//        i2cdevice = PX4_I2C_BUS_ONBOARD;
+//	}
+    int ch;
+    int myoptind = 1;
+    const char *myoptarg = nullptr;
 
-	if (optind >= argc) {
+    while ((ch = px4_getopt(argc, argv, "b:", &myoptind, &myoptarg)) != EOF) {
+        switch (ch) {
+        case 'b':
+            i2cdevice = (uint8_t)atoi(myoptarg);
+            break;
+
+        default:
+            PX4_WARN("Unknown option!");
+            return -1;
+        }
+    }
+    if (myoptind >= argc) {
 		irlock_usage();
 		exit(1);
 	}
 
-	const char *command = argv[optind];
+    const char *command = argv[myoptind];
 
 	/** start driver **/
 	if (!strcmp(command, "start")) {
