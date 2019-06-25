@@ -433,7 +433,6 @@ then
 	fi
 	send_event start
 	load_mon start
-	mb12xx start #start by zjm 
 	#
 	# Check if UAVCAN is enabled, default to it for ESCs
 	#
