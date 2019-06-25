@@ -1237,7 +1237,7 @@ Commander::run()
 	status.rc_input_mode = vehicle_status_s::RC_IN_MODE_DEFAULT;
 	internal_state.main_state = commander_state_s::MAIN_STATE_MANUAL;
 	internal_state.timestamp = hrt_absolute_time();
-	status.nav_state = vehicle_status_s::NAVIGATION_STATE_MANUAL;
+    status.nav_state = vehicle_status_s::NAVIGATION_STATE_MANUAL;
 	status.arming_state = vehicle_status_s::ARMING_STATE_INIT;
 
 	status.failsafe = false;
@@ -1891,7 +1891,7 @@ Commander::run()
 		hrt_abstime timeout_time = disarm_when_landed * 1_s;
 
 		if (!have_taken_off_since_arming) {
-			timeout_time *= 5;
+            timeout_time *= 3;
 		}
 
 		auto_disarm_hysteresis.set_hysteresis_time_from(false, timeout_time);
@@ -2214,11 +2214,9 @@ Commander::run()
 				mavlink_log_critical(&mavlink_log_pub, "Flight termination active");
 			}
 		}
-
 		/* RC input check */
 		if (!status_flags.rc_input_blocked && sp_man.timestamp != 0 &&
 		    (hrt_elapsed_time(&sp_man.timestamp) < (rc_loss_timeout * 1_s))) {
-
 			/* handle the case where RC signal was regained */
 			if (!status_flags.rc_signal_found_once) {
 				status_flags.rc_signal_found_once = true;
@@ -2337,7 +2335,7 @@ Commander::run()
 
 			/* evaluate the main state machine according to mode switches */
 			bool first_rc_eval = (_last_sp_man.timestamp == 0) && (sp_man.timestamp > 0);
-			transition_result_t main_res = set_main_state(status, &status_changed);
+            transition_result_t main_res = set_main_state(status, &status_changed);
 
 			/* store last position lock state */
 			_last_condition_global_position_valid = status_flags.condition_global_position_valid;
@@ -2950,7 +2948,7 @@ Commander::set_main_state(const vehicle_status_s &status_local, bool *changed)
 		return set_main_state_override_on(status_local, changed);
 
 	} else {
-		return set_main_state_rc(status_local, changed);
+        return set_main_state_rc(status_local, changed);
 	}
 }
 
@@ -2968,7 +2966,6 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 {
 	/* set main state according to RC switches */
 	transition_result_t res = TRANSITION_DENIED;
-
 	// Note: even if status_flags.offboard_control_set_by_command is set
 	// we want to allow rc mode change to take precidence.  This is a safety
 	// feature, just in case offboard control goes crazy.
@@ -2986,7 +2983,8 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 		 (_last_sp_man.loiter_switch == sp_man.loiter_switch) &&
 		 (_last_sp_man.mode_slot == sp_man.mode_slot) &&
 		 (_last_sp_man.stab_switch == sp_man.stab_switch) &&
-		 (_last_sp_man.man_switch == sp_man.man_switch)))) {
+         (_last_sp_man.man_switch == sp_man.man_switch) &&
+         (fabsf( _last_sp_man.aux3 - sp_man.aux3) < 0.2f)))) {//增加副主通道3（精准降落）变化检测zjm
 
 		// store the last manual control setpoint set by the pilot in a manual state
 		// if the system now later enters an autonomous state the pilot can move
@@ -3010,7 +3008,6 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 		/* no timestamp change or no switch change -> nothing changed */
 		return TRANSITION_NOT_CHANGED;
 	}
-
 	_last_sp_man = sp_man;
 
 	// reset the position and velocity validity calculation to give the best change of being able to select
@@ -3061,7 +3058,6 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 			return res;
 		}
 	}
-
 	/* we know something has changed - check if we are in mode slot operation */
 	if (sp_man.mode_slot != manual_control_setpoint_s::MODE_SLOT_NONE) {
 
@@ -3071,7 +3067,9 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 		}
 
 		int new_mode = _flight_mode_slots[sp_man.mode_slot];
-
+        /*只有当前状态为跟踪模式才能切换到精准降落模式，便于降落时发现目标*/
+        if(sp_man.aux3 > 0.0f && (internal_state.main_state == commander_state_s::MAIN_STATE_AUTO_FOLLOW_TARGET))
+            new_mode = commander_state_s::MAIN_STATE_AUTO_PRECLAND;
 		if (new_mode < 0) {
 			/* slot is unused */
 			res = TRANSITION_NOT_CHANGED;
@@ -3087,6 +3085,18 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 			while (res == TRANSITION_DENIED && maxcount > 0) {
 
 				maxcount--;
+                /*精准降落模式切换失败则进入定点模式*/
+                if (new_mode == commander_state_s::MAIN_STATE_AUTO_PRECLAND) {
+
+                    /* fall back to loiter */
+                    new_mode = commander_state_s::MAIN_STATE_AUTO_LOITER;
+                    print_reject_mode("PRECISE LAND");
+                    res = main_state_transition(status_local, new_mode, status_flags, &internal_state);
+
+                    if (res != TRANSITION_DENIED) {
+                        break;
+                    }
+                }
 
 				if (new_mode == commander_state_s::MAIN_STATE_AUTO_MISSION) {
 
@@ -3164,7 +3174,7 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 
 					/* fall back to altitude control */
 					new_mode = commander_state_s::MAIN_STATE_ALTCTL;
-					print_reject_mode("POSITION CONTROL");
+                    print_reject_mode("POSITION CONTROL");
 					res = main_state_transition(status_local, new_mode, status_flags, &internal_state);
 
 					if (res != TRANSITION_DENIED) {
@@ -3280,7 +3290,7 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 				break;	// changed successfully or already in this state
 			}
 
-			print_reject_mode("POSITION CONTROL");
+            print_reject_mode("POSITION CONTROL");
 		}
 
 		// fallback to ALTCTL
