@@ -55,7 +55,6 @@
 #include <v2.0/mavlink_types.h>
 #define FORMATION
 //#define FORMATIONTEST   //调试navigator start会切换到跟踪模式,注释后通过地面站切换到跟踪模式
-#define YAWTEST
 //#define VIRTUALTEST
 extern const mavlink_system_t mavlink_system;
 class FollowTarget : public MissionBlock, public ModuleParams
@@ -73,11 +72,12 @@ private:
 
 	static constexpr int TARGET_TIMEOUT_MS = 2500;
     static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 3;//5
-    static constexpr float LAND_ACCEPTANCE_RADIUS_M = 0.5f;//距离目标0.5m以内开始降落
+    static constexpr float LAND_ACCEPTANCE_RADIUS_M = 0.2f;//在目标半径以内开始降落
     static constexpr float DESCEND_VEL = 0.2f;//降落速度m/s
     static constexpr int INTERPOLATION_PNTS = 4;//20
-	static constexpr float FF_K = .25F;
+    static constexpr float FF_K = 0.5f;//.25F
     static constexpr float OFFSET_M = 8;
+    static constexpr float SAFTY_HGT = 1.0f;//设定安全高度，低于次高度且不在圈内则升高至次高度，避免与移动目标相撞
     const uint8_t LEADER_ID = 1;
 	enum FollowTargetState {
 		TRACK_POSITION,
@@ -104,8 +104,8 @@ private:
 		(ParamFloat<px4::params::NAV_MIN_FT_HT>)	_param_min_alt,
 		(ParamFloat<px4::params::NAV_FT_DST>) _param_tracking_dist,
 		(ParamInt<px4::params::NAV_FT_FS>) _param_tracking_side,
-        (ParamFloat<px4::params::NAV_FT_RS>) _param_tracking_resp//,
-        //(ParamFloat<px4::params::NAV_FT_ORIENTATION>) _param_Orientation
+        (ParamFloat<px4::params::NAV_FT_RS>) _param_tracking_resp,
+        (ParamFloat<px4::params::NAV_FT_ANGLE>) _param_angle
 	)
 
 	FollowTargetState _follow_target_state{SET_WAIT_FOR_TARGET_POSITION};
@@ -145,6 +145,8 @@ private:
     #endif
     bool _ready_to_land;//在目标点0.5m以内保持3s为真，开始降落
     bool _enter_land_radius = false;  //进入
+    bool _first_enter_land_radius = false; //第一次进入后才开始降落高度
+    bool _reach_safty_hgt = false;        //到达设定高度后只有在圈内才开始降落，否则升高到设定高度
     float _descend_alt = 0.0f;
     int _manual_sp_sub = -1;
     manual_control_setpoint_s _manual_sp = {};
