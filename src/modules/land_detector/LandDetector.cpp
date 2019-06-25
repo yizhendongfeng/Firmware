@@ -46,7 +46,7 @@
 #include <px4_defines.h>
 #include <drivers/drv_hrt.h>
 #include "uORB/topics/parameter_update.h"
-
+#include <systemlib/mavlink_log.h>
 using namespace time_literals;
 
 namespace land_detector
@@ -208,6 +208,11 @@ void LandDetector::_update_state()
 	} else {
 		_state = LandDetectionState::FLYING;
 	}
+    if(_arming.armed && _state != LandDetectionState::FLYING && hrt_elapsed_time(&_last_updated_time) > 1e6)
+    {
+        _last_updated_time = hrt_absolute_time();
+//        mavlink_log_info(&_mavlink_log_pub, "_state:%d", _state);
+    }
 }
 
 bool LandDetector::_orb_update(const struct orb_metadata *meta, int handle, void *buffer)

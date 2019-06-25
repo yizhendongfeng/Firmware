@@ -163,6 +163,8 @@ protected:
 	struct actuator_armed_s	_arming {};
 
 private:
+    orb_advert_t	_mavlink_log_pub{nullptr};	/**< the uORB advert to send messages over mavlink */
+    hrt_abstime _last_updated_time{0};
 	static void _cycle_trampoline(void *arg);
 
 	void _cycle();
