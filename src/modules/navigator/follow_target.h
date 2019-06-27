@@ -50,8 +50,6 @@
 #include <uORB/topics/follow_target.h>
 #include <uORB/topics/formation_position.h>
 #include <uORB/topics/manual_control_setpoint.h>
-#include <uORB/topics/land_on_target.h>
-
 #include <v2.0/mavlink_types.h>
 #define FORMATION
 //#define FORMATIONTEST   //调试navigator start会切换到跟踪模式,注释后通过地面站切换到跟踪模式
