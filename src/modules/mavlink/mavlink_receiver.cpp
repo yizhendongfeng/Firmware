@@ -81,7 +81,7 @@
 #endif
 
 using matrix::wrap_2pi;
-
+using matrix::wrap_pi;
 MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_mavlink(parent),
 	_mavlink_ftp(parent),
@@ -262,7 +262,8 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 	case MAVLINK_MSG_ID_DEBUG_FLOAT_ARRAY:
 		handle_message_debug_float_array(msg);
 		break;
-
+    case MAVLINK_MSG_ID_GLOBAL_POSITION_INT:    //zjm, receive other global gps msg from qgroundcontrol. used for formation control
+        handle_message_gps_global_init(msg);
 	default:
 		break;
 	}
@@ -2511,6 +2512,65 @@ MavlinkReceiver::handle_message_debug_vect(mavlink_message_t *msg)
 	}
 }
 
+///接收并转发地面站广播的其他飞机位置信息  ***zjm
+void MavlinkReceiver::handle_message_gps_global_init(mavlink_message_t *msg)
+{
+//    if(msg->sysid == mavlink_system.sysid)  //如果意外接收到本机发送到地面站的位置信息则返回
+//        return;
+    mavlink_global_position_int_t global_position_msg;
+    mavlink_msg_global_position_int_decode(msg, &global_position_msg);
+    formation_position_s gcs_formation_position;
+    memset(&gcs_formation_position, 0, sizeof(gcs_formation_position));
+    gcs_formation_position.timestamp = hrt_absolute_time();     //global_position_msg.time_boot_ms;
+    gcs_formation_position.lon = global_position_msg.lon / 1e7;
+    gcs_formation_position.lat = global_position_msg.lat / 1e7;
+    gcs_formation_position.alt = global_position_msg.alt / 1e3;
+    gcs_formation_position.vel_n = global_position_msg.vx / 1e2;
+    gcs_formation_position.vel_e = global_position_msg.vy / 1e2;
+    gcs_formation_position.vel_d = global_position_msg.vz / 1e2;
+    gcs_formation_position.yaw = wrap_pi(math::radians(global_position_msg.hdg / 1e2));
+    gcs_formation_position.sysid = msg->sysid;
+    int formation_instance_mulit = -1;
+//    PX4_INFO("mavlink: sysid:%d,current_time:%llu",msg->sysid, hrt_absolute_time());
+
+    switch(msg->sysid)
+    {
+    case 1:
+        if (_formation_pos_pubs[0] == nullptr) {
+            _formation_pos_pubs[0] = orb_advertise_multi(ORB_ID(formation_position), &gcs_formation_position, &formation_instance_mulit, ORB_PRIO_DEFAULT);
+
+        } else {
+            orb_publish(ORB_ID(formation_position), _formation_pos_pubs[0], &gcs_formation_position);
+        }
+        break;
+    case 2:
+        if (_formation_pos_pubs[1] == nullptr) {
+            _formation_pos_pubs[1] = orb_advertise_multi(ORB_ID(formation_position), &gcs_formation_position, &formation_instance_mulit, ORB_PRIO_DEFAULT);
+
+        } else {
+            orb_publish(ORB_ID(formation_position), _formation_pos_pubs[1], &gcs_formation_position);
+        }
+        break;
+    case 3:
+        if (_formation_pos_pubs[2] == nullptr) {
+            _formation_pos_pubs[2] = orb_advertise_multi(ORB_ID(formation_position), &gcs_formation_position, &formation_instance_mulit, ORB_PRIO_DEFAULT);
+
+        } else {
+            orb_publish(ORB_ID(formation_position), _formation_pos_pubs[2], &gcs_formation_position);
+        }
+        break;
+//    case 4:
+//        if (_formation_global_pos_pubs[3] == nullptr) {
+//            _formation_global_pos_pubs[3] = orb_advertise_multi(ORB_ID(formation_position), &gcs_vehicle_global_position, &formation_instance_mulit, ORB_PRIO_DEFAULT);
+
+//        } else {
+//            orb_publish(ORB_ID(formation_position), _formation_global_pos_pubs[1], &gcs_vehicle_global_position);
+//        }
+//        break;
+    default:
+        break;
+    }
+}
 void
 MavlinkReceiver::handle_message_debug_float_array(mavlink_message_t *msg)
 {
