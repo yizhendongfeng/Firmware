@@ -56,6 +56,7 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_status.h>
 
 using namespace time_literals;
 
@@ -131,6 +132,7 @@ private:
 	int _sensor_bias_sub{ -1};
 	int _vehicle_control_mode_sub{ -1};
 	int _battery_sub{ -1};
+    int _vehicle_status_sub{-1};
 
 	vehicle_local_position_s				_vehicleLocalPosition {};
 	vehicle_local_position_setpoint_s	_vehicleLocalPositionSetpoint {};
@@ -139,6 +141,7 @@ private:
 	sensor_bias_s					_sensors {};
 	vehicle_control_mode_s				_control_mode {};
 	battery_status_s						_battery {};
+    vehicle_status_s                      _vehicle_status{};
 
 	hrt_abstime _min_trust_start{0};		///< timestamp when minimum trust was applied first
 	hrt_abstime _landed_time{0};

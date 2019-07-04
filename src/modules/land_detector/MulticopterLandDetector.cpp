@@ -100,6 +100,7 @@ void MulticopterLandDetector::_initialize_topics()
 	_sensor_bias_sub = orb_subscribe(ORB_ID(sensor_bias));
 	_vehicle_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
 	_battery_sub = orb_subscribe(ORB_ID(battery_status));
+    _vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 }
 
 void MulticopterLandDetector::_update_topics()
@@ -111,6 +112,7 @@ void MulticopterLandDetector::_update_topics()
 	_orb_update(ORB_ID(sensor_bias), _sensor_bias_sub, &_sensors);
 	_orb_update(ORB_ID(vehicle_control_mode), _vehicle_control_mode_sub, &_control_mode);
 	_orb_update(ORB_ID(battery_status), _battery_sub, &_battery);
+    _orb_update(ORB_ID(vehicle_status), _vehicle_status_sub, &_vehicle_status);
 }
 
 void MulticopterLandDetector::_update_params()
@@ -190,7 +192,17 @@ bool MulticopterLandDetector::_get_ground_contact_state()
 	_in_descend = _is_climb_rate_enabled()
 		      && (_vehicleLocalPositionSetpoint.vz >= land_speed_threshold);
 	bool hit_ground = _in_descend && !verticalMovement;
-
+    //移动平台降落检测时忽略水平运动zjm
+//    PX4_INFO("_is_climb_rate_enabled():%d,_vehicleLocalPositionSetpoint.vz:%.1f,land_speed_threshold:%.1f",
+//             _is_climb_rate_enabled(),(double)_vehicleLocalPositionSetpoint.vz,(double)land_speed_threshold);
+//    PX4_INFO("***nav_state:%d,_has_low_thrust():%d,hit_ground:%d,verticalMovement:%d,_has_altitude_lock():%d",
+//             _vehicle_status.nav_state,_has_low_thrust(),hit_ground,verticalMovement,_has_altitude_lock());
+    if (_vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET &&
+            (_has_low_thrust() || hit_ground) && (!verticalMovement || !_has_altitude_lock()))
+    {
+        PX4_INFO("FOLLOW_TARGET get_ground_contact");
+        return true;
+    }
 	// TODO: we need an accelerometer based check for vertical movement for flying without GPS
 	if ((_has_low_thrust() || hit_ground) && (!_horizontal_movement || !_has_position_lock())
 	    && (!verticalMovement || !_has_altitude_lock())) {
@@ -241,7 +253,12 @@ bool MulticopterLandDetector::_get_maybe_landed_state()
 		// quite acrobatic flight.
 		return (_min_trust_start > 0) && (hrt_elapsed_time(&_min_trust_start) > 8_s);
 	}
-
+    //如果在移动平台上起降，忽略无人机姿态变化
+    if(_vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET && _ground_contact_hysteresis.get_state())
+    {
+        PX4_INFO("FOLLOW_TARGET get_maybe_landed");
+        return true;
+    }
 	if (_ground_contact_hysteresis.get_state() && _has_minimal_thrust() && !rotating) {
 		// Ground contact, no thrust and no movement -> landed
 		return true;
