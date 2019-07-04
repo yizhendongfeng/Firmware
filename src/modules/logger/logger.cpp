@@ -50,6 +50,9 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_command_ack.h>
+#include <uORB/topics/formation_position.h>
+#include <uORB/topics/follow_target.h>
+#include <uORB/topics/landing_target_pose.h>
 
 #include <drivers/drv_hrt.h>
 #include <px4_getopt.h>
@@ -658,7 +661,9 @@ void Logger::add_default_topics()
 	add_topic("vehicle_status_flags");
 	add_topic("vtol_vehicle_status", 200);
 	add_topic("wind_estimate", 200);
-
+    add_topic("formation_position");//zjm
+    add_topic("follow_target");
+    add_topic("landing_target_pose");
 #ifdef CONFIG_ARCH_BOARD_PX4_SITL
 	add_topic("actuator_controls_virtual_fw");
 	add_topic("actuator_controls_virtual_mc");
