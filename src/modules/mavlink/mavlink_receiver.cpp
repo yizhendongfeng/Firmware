@@ -2280,10 +2280,10 @@ MavlinkReceiver::handle_message_hil_state_quaternion(mavlink_message_t *msg)
 		hil_global_pos.epv = 4.0f;
 
 		if (_global_pos_pub == nullptr) {
-            _global_pos_pub = orb_advertise(ORB_ID(formation_position), &hil_global_pos);
+            _global_pos_pub = orb_advertise(ORB_ID(vehicle_global_position), &hil_global_pos);
 
 		} else {
-            orb_publish(ORB_ID(formation_position), _global_pos_pub, &hil_global_pos);
+            orb_publish(ORB_ID(vehicle_global_position), _global_pos_pub, &hil_global_pos);
 		}
 	}
 
