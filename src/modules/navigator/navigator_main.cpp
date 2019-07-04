@@ -759,7 +759,19 @@ Navigator::run()
 		}
 
 		_navigation_mode = navigation_mode_new;
-
+#if defined(FORMATIONTEST) || defined(PRECLANDTEST)
+#ifdef FORMATIONTEST
+        _navigation_mode_array[10]->run(true);  //开始跟踪目标测试    zjm
+#endif
+#ifdef PRECLANDTEST
+        _navigation_mode_array[9]->run(true);  //开始精准降落测试    zjm
+#endif
+#else
+        /* iterate through navigation modes and set active/inactive for each */
+        for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
+            _navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
+        }
+#endif
 		/* iterate through navigation modes and set active/inactive for each */
 		for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
 			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);

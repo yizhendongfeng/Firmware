@@ -36,6 +36,8 @@ px4_add_module(
 	MAIN navigator
 	STACK_MAIN 1300
 	COMPILE_FLAGS
+        INCLUDES
+                ${PX4_SOURCE_DIR}/mavlink/include/mavlink
 	SRCS
 		navigator_main.cpp
 		navigator_mode.cpp
