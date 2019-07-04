@@ -90,3 +90,13 @@ PARAM_DEFINE_INT32(NAV_FT_FS, 1);
  */
 PARAM_DEFINE_FLOAT(NAV_FT_RS, 0.5f);
 
+/**
+ * Rotated angle relative to yaw angle of leader
+ *
+ * @unit degree
+ * @min 0.0
+ * @max 360.0
+ * @decimal 2
+ * @group Follow target
+ */
+PARAM_DEFINE_FLOAT(NAV_FT_ANGLE, 180.f);

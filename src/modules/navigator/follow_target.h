@@ -48,7 +48,13 @@
 
 #include <px4_module_params.h>
 #include <uORB/topics/follow_target.h>
-
+#include <uORB/topics/formation_position.h>
+#include <uORB/topics/manual_control_setpoint.h>
+#include <v2.0/mavlink_types.h>
+#define FORMATION
+//#define FORMATIONTEST   //调试navigator start会切换到跟踪模式,注释后通过地面站切换到跟踪模式
+//#define VIRTUALTEST
+extern const mavlink_system_t mavlink_system;
 class FollowTarget : public MissionBlock, public ModuleParams
 {
 
@@ -63,11 +69,14 @@ public:
 private:
 
 	static constexpr int TARGET_TIMEOUT_MS = 2500;
-	static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 5;
-	static constexpr int INTERPOLATION_PNTS = 20;
-	static constexpr float FF_K = .25F;
-	static constexpr float OFFSET_M = 8;
-
+    static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 3;//5
+    static constexpr float LAND_ACCEPTANCE_RADIUS_M = 0.2f;//在目标半径以内开始降落
+    static constexpr float DESCEND_VEL = 0.2f;//降落速度m/s
+    static constexpr int INTERPOLATION_PNTS = 4;//20
+    static constexpr float FF_K = 0.5f;//.25F
+    static constexpr float OFFSET_M = 8;
+    static constexpr float SAFTY_HGT = 1.0f;//设定安全高度，低于次高度且不在圈内则升高至次高度，避免与移动目标相撞
+    const uint8_t LEADER_ID = 1;
 	enum FollowTargetState {
 		TRACK_POSITION,
 		TRACK_VELOCITY,
@@ -90,21 +99,27 @@ private:
 	};
 
 	DEFINE_PARAMETERS(
-		(ParamFloat<px4::params::NAV_MIN_FT_HT>) _param_nav_min_ft_ht,
-		(ParamFloat<px4::params::NAV_FT_DST>) _param_nav_ft_dst,
-		(ParamInt<px4::params::NAV_FT_FS>) _param_nav_ft_fs,
-		(ParamFloat<px4::params::NAV_FT_RS>) _param_nav_ft_rs
+		(ParamFloat<px4::params::NAV_MIN_FT_HT>)	_param_min_alt,
+		(ParamFloat<px4::params::NAV_FT_DST>) _param_tracking_dist,
+		(ParamInt<px4::params::NAV_FT_FS>) _param_tracking_side,
+        (ParamFloat<px4::params::NAV_FT_RS>) _param_tracking_resp,
+        (ParamFloat<px4::params::NAV_FT_ANGLE>) _param_angle
 	)
 
 	FollowTargetState _follow_target_state{SET_WAIT_FOR_TARGET_POSITION};
 	int _follow_target_position{FOLLOW_FROM_BEHIND};
 
 	int _follow_target_sub{-1};
+    uint64_t _info_last_time{0}; //输出到地面站消息定时器
+    uint64_t _prev_time{0}; //计算循环间隔
+    bool _info_time_updated{false};
 	float _step_time_in_ms{0.0f};
 	float _follow_offset{OFFSET_M};
 
 	uint64_t _target_updates{0};
 	uint64_t _last_update_time{0};
+    uint64_t _last_landing_time{0}; //计算处于保持在可降范围的时间
+    uint64_t _last_execution_time{0}; //计算处于保持在可降范围的时间
 
 	matrix::Vector3f _current_vel;
 	matrix::Vector3f _step_vel;
@@ -116,7 +131,24 @@ private:
 
 	follow_target_s _current_target_motion{};
 	follow_target_s _previous_target_motion{};
-
+#ifdef FORMATION
+    formation_position_s _formation_positions[4];   //一条船，三架飞机，使用下标来获取船和其他飞机位置
+    int	_formation_pos_sub[4] = {-1, -1, -1, -1};
+    int _interpolation_points = 0;
+    #ifdef VIRTUALTEST
+        orb_advert_t	_follow_target_pub{nullptr};
+        matrix::Vector3f _virtual_target_movement = matrix::Vector3f(0.0f, 0.0f, 0.0f);  //
+        follow_target_s _virtual_target{};  //以返航点为基础以固定速度产生虚拟期望点
+        bool _prev_time_updated{false};
+    #endif
+    bool _ready_to_land;//在目标点0.5m以内保持3s为真，开始降落
+    bool _enter_land_radius = false;  //进入
+    bool _first_enter_land_radius = false; //第一次进入后才开始降落高度
+    bool _reach_safty_hgt = false;        //到达设定高度后只有在圈内才开始降落，否则升高到设定高度
+    float _descend_alt = 0.0f;
+    int _manual_sp_sub = -1;
+    manual_control_setpoint_s _manual_sp = {};
+#endif
 	float _yaw_rate{0.0f};
 	float _responsiveness{0.0f};
 	float _yaw_angle{0.0f};
