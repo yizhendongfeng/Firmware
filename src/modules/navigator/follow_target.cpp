@@ -154,7 +154,7 @@ void FollowTarget::on_active()
             _formation_positions[formation_pos.sysid].sysid = formation_pos.sysid;
             pos_updated[formation_pos.sysid] = true;
 
-            PX4_INFO("i:%d,receive sysid:%d pos, current_time:%lu, leader_updated:%d",
+            PX4_INFO("i:%d,receive sysid:%d pos, current_time:%llu, leader_updated:%d",
                      i, formation_pos.sysid, current_time, pos_updated[formation_pos.sysid]);
         }
     }
