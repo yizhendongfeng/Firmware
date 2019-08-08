@@ -2705,7 +2705,9 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 		|| (_last_sp_man.loiter_switch != sp_man.loiter_switch)
 		|| (_last_sp_man.mode_slot != sp_man.mode_slot)
 		|| (_last_sp_man.stab_switch != sp_man.stab_switch)
-		|| (_last_sp_man.man_switch != sp_man.man_switch);
+        || (_last_sp_man.man_switch != sp_man.man_switch)
+        //增加副主通道3（精准降落）变化检测zjm
+        || (/*(_last_sp_man.man_switch == sp_man.man_switch) && */(fabsf( _last_sp_man.aux3 - sp_man.aux3) > 0.2f));
 
 	// only switch mode based on RC switch if necessary to also allow mode switching via MAVLink
 	const bool should_evaluate_rc_mode_switch = first_time_rc
@@ -2798,7 +2800,9 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 		}
 
 		int new_mode = _flight_mode_slots[sp_man.mode_slot];
-
+        /*只有当前状态为跟踪模式才能切换到精准降落模式，便于降落时发现目标*/
+        if(sp_man.aux3 > 0.0f && (internal_state.main_state == commander_state_s::MAIN_STATE_AUTO_FOLLOW_TARGET))
+            new_mode = commander_state_s::MAIN_STATE_AUTO_PRECLAND;
 		if (new_mode < 0) {
 			/* slot is unused */
 			res = TRANSITION_NOT_CHANGED;
@@ -2814,6 +2818,17 @@ Commander::set_main_state_rc(const vehicle_status_s &status_local, bool *changed
 			while (res == TRANSITION_DENIED && maxcount > 0) {
 
 				maxcount--;
+                /*精准降落模式切换失败则进入定点模式*/
+                if (new_mode == commander_state_s::MAIN_STATE_AUTO_PRECLAND) {
+                    /* fall back to loiter */
+                    new_mode = commander_state_s::MAIN_STATE_AUTO_LOITER;
+                    print_reject_mode("PRECISE LAND");
+                    res = main_state_transition(status_local, new_mode, status_flags, &internal_state);
+
+                    if (res != TRANSITION_DENIED) {
+                        break;
+                    }
+                }
 
 				if (new_mode == commander_state_s::MAIN_STATE_AUTO_MISSION) {
 
