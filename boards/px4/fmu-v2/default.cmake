@@ -27,8 +27,8 @@ px4_add_board(
 		#camera_trigger
 		#differential_pressure # all available differential pressure drivers
 		differential_pressure/ms4525
-		#distance_sensor # all available distance sensor drivers
-		distance_sensor/ll40ls
+		distance_sensor # all available distance sensor drivers
+		#distance_sensor/ll40ls
 		#distance_sensor/sf0x
 		gps
 		#heater
@@ -39,7 +39,7 @@ px4_add_board(
 		imu/mpu6000
 		imu/mpu9250
 		#iridiumsbd
-		#irlock
+		irlock
 		#lights/blinkm
 		#lights/oreoled
 		lights/rgbled
@@ -70,12 +70,12 @@ px4_add_board(
 		dataman
 		ekf2
 		events
-		fw_att_control
-		fw_pos_control_l1
+		#fw_att_control
+		#fw_pos_control_l1
 		#gnd_att_control
 		#gnd_pos_control
 		land_detector
-		#landing_target_estimator
+		landing_target_estimator
 		load_mon
 		#local_position_estimator
 		logger
@@ -85,8 +85,9 @@ px4_add_board(
 		navigator
 		sensors
 		vmount
-		vtol_att_control
+		#vtol_att_control
 		#wind_estimator
+		harpoon
 
 	SYSTEMCMDS
 		bl_update

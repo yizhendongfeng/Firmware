@@ -497,7 +497,12 @@ else
 		param save
 		reboot
 	fi
-
+	#
+	# Start landing_target_estimator  ***zjm
+	#
+	landing_target_estimator start
+	#start harpoon control thread	 ***zjm
+	harpoon start
 #
 # End of autostart.
 #
