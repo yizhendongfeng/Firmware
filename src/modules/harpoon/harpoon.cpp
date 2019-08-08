@@ -82,7 +82,7 @@ static bool thread_running = false;		/**< daemon status flag */
 static int harpoon_task;				/**< Handle of daemon task / thread */
 int harpoon_thread_main(int argc, char *argv[])
 {
-    warnx("[daemon] starting\n");
+    PX4_INFO("[daemon] starting\n");
     orb_advert_t	_mavlink_log_pub{nullptr};	/**< the uORB advert to send messages over mavlink */
     int uart_fd= -1;
     char harpoon_cmd = -1;   //1:起飞，2:降落
@@ -98,7 +98,7 @@ int harpoon_thread_main(int argc, char *argv[])
      * TELEM2 : /dev/ttyS2
      * GPS    : /dev/ttyS3
      * NSH    : /dev/ttyS5
-     * SERIAL4: /dev/ttyS6
+     * SERIAL4: /dev/ttyS6 gps2口
      * N/A    : /dev/ttyS4
      * IO DEBUG (RX only):/dev/ttyS0
      */
@@ -157,7 +157,7 @@ int harpoon_thread_main(int argc, char *argv[])
         }
         usleep(50000);//50ms
     }
-    warnx("[daemon] exiting.\n");
+    PX4_INFO("[daemon] exiting.\n");
 
     thread_running = false;
 
@@ -168,10 +168,10 @@ static void
 usage(const char *reason)
 {
     if (reason) {
-        warnx("%s\n", reason);
+        PX4_INFO("%s\n", reason);
     }
 
-    warnx("usage: daemon {start|stop|status} [-p <additional params>]\n\n");
+    PX4_INFO("usage: daemon {start|stop|status} [-p <additional params>]\n\n");
 }
 
 
@@ -180,7 +180,7 @@ int uart_init(char * uart_name)
     int serial_fd = open(uart_name, O_RDWR | O_NOCTTY);
 
     if (serial_fd < 0) {
-        err(1, "failed to open port: %s", uart_name);
+        PX4_INFO("failed to open port: %s", uart_name);
         return false;
     }
     if(fcntl(serial_fd, F_SETFL, FNDELAY) < 0)
@@ -200,7 +200,7 @@ int set_uart_baudrate(const int fd, unsigned int baud)
     case 57600:  speed = B57600;  break;
     case 115200: speed = B115200; break;
     default:
-        warnx("ERR: baudrate: %d\n", baud);
+        PX4_INFO("ERR: baudrate: %d\n", baud);
         return -EINVAL;
     }
 
@@ -216,17 +216,17 @@ int set_uart_baudrate(const int fd, unsigned int baud)
     uart_config.c_cflag &= ~(CSTOPB | PARENB);
     /* set baud rate */
     if ((termios_state = cfsetispeed(&uart_config, speed)) < 0) {
-        warnx("ERR: %d (cfsetispeed)\n", termios_state);
+        PX4_INFO("ERR: %d (cfsetispeed)\n", termios_state);
         return false;
     }
 
     if ((termios_state = cfsetospeed(&uart_config, speed)) < 0) {
-        warnx("ERR: %d (cfsetospeed)\n", termios_state);
+        PX4_INFO("ERR: %d (cfsetospeed)\n", termios_state);
         return false;
     }
 
     if ((termios_state = tcsetattr(fd, TCSANOW, &uart_config)) < 0) {
-        warnx("ERR: %d (tcsetattr)\n", termios_state);
+        PX4_INFO("ERR: %d (tcsetattr)\n", termios_state);
         return false;
     }
     return true;
@@ -251,7 +251,7 @@ int harpoon_main(int argc, char *argv[])
     if (!strcmp(argv[1], "start")) {
 
         if (thread_running) {
-            warnx("daemon already running\n");
+            PX4_INFO("daemon already running\n");
             /* this is not an error */
             return 0;
         }
@@ -273,10 +273,10 @@ int harpoon_main(int argc, char *argv[])
 
     if (!strcmp(argv[1], "status")) {
         if (thread_running) {
-            warnx("\trunning\n");
+            PX4_INFO("\trunning\n");
 
         } else {
-            warnx("\tnot started\n");
+            PX4_INFO("\tnot started\n");
         }
 
         return 0;
