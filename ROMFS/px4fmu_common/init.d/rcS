@@ -497,7 +497,7 @@ else
 		param save
 		reboot
 	fi
-
+	usv start
 #
 # End of autostart.
 #
