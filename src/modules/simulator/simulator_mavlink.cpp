@@ -45,6 +45,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <pthread.h>
 #include <conversion/rotation.h>
 #include <mathlib/mathlib.h>
@@ -661,7 +662,7 @@ void Simulator::poll_for_MAVLink_messages()
 
 	struct sockaddr_in _myaddr {};
 	_myaddr.sin_family = AF_INET;
-	_myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	_myaddr.sin_addr.s_addr = inet_addr("192.168.182.1");//htonl(INADDR_ANY);
 	_myaddr.sin_port = htons(_port);
 
 	if (_ip == InternetProtocol::UDP) {
